@@ -1,0 +1,7 @@
+{
+    "name": "Forts",
+    "author": "buj",
+    "main": "forts.Main",
+    "description": "The Forts server plugin",
+    "version": 1.0
+}

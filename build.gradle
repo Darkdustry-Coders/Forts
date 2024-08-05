@@ -1,0 +1,48 @@
+import groovy.json.JsonSlurper
+
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.0.0'
+}
+
+def json = new JsonSlurper()
+def mod = json.parse("$rootDir/src/main/resources/plugin.json" as File)
+
+group = "net.buj"
+version = "${mod['version']}"
+
+compileJava.options.encoding = "UTF-8"
+
+repositories {
+    mavenCentral()
+    maven { url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
+    maven { url 'https://www.jitpack.io' }
+}
+
+allprojects {
+    tasks.withType(JavaCompile).configureEach {
+        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
+    compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+    annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
+    testImplementation 'org.jetbrains.kotlin:kotlin-test'
+}
+
+jar {
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+test {
+    useJUnitPlatform()
+}
+kotlin {
+    jvmToolchain(8)
+}
