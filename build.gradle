@@ -1,5 +1,8 @@
 import groovy.json.JsonSlurper
 
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+
 plugins {
     id 'org.jetbrains.kotlin.jvm' version '2.0.0'
 }
@@ -45,4 +48,38 @@ test {
 }
 kotlin {
     jvmToolchain(8)
+}
+
+tasks.register("runServer") {
+    dependsOn build
+
+    doLast {
+        def path = rootProject.rootDir.toPath().resolve("run")
+        Files.createDirectories(path.resolve("config/mods"))
+
+        if (!Files.exists(path.resolve("server.jar"))) {
+            println "Downloading Mindustry server..."
+            Files.copy(
+                    new URL("https://github.com/Anuken/Mindustry/releases/download/v146/server-release.jar").openStream(),
+                    path.resolve("server.jar"))
+        }
+
+        Files.copy(
+                jar.archiveFile.get().asFile.toPath(),
+                path.resolve("config/mods/Debug.jar"),
+                StandardCopyOption.REPLACE_EXISTING)
+
+        javaexec {
+            classpath = files(path.resolve("server.jar"))
+            workingDir = path.toFile()
+            standardInput = System.in
+
+            debugOptions {
+                enabled = true
+                port = 7857
+                server = true
+                suspend = false
+            }
+        }
+    }
 }
