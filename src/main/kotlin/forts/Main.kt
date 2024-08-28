@@ -105,6 +105,7 @@ class Main: Plugin() {
     private val whitelist = IntSeq()
     private val noAssist = Seq<String>()
     private var allowNoAssist = true
+    private var enableAssist = true
 
     private val gameStage = ObjectMap<Team, GameStage>()
 
@@ -123,9 +124,13 @@ class Main: Plugin() {
             gameStage.clear()
 
             allowNoAssist = true
+            enableAssist = true
             Vars.state.rules.objectives.forEach {
                 if (it.typeName() == "flag" && it is FlagObjective && it.flag == "forceassist") {
                     allowNoAssist = false
+                }
+                if (it.typeName() == "flag" && it is FlagObjective && it.flag == "noassist") {
+                    enableAssist = false
                 }
             }
 
