@@ -14,6 +14,7 @@ import mindustry.content.Fx
 import mindustry.content.Items
 import mindustry.game.EventType.BlockBuildEndEvent
 import mindustry.game.EventType.PlayEvent
+import mindustry.game.MapObjectives.FlagObjective
 import mindustry.game.Team
 import mindustry.gen.Building
 import mindustry.gen.Call
@@ -103,6 +104,7 @@ class Main: Plugin() {
 
     private val whitelist = IntSeq()
     private val noAssist = Seq<String>()
+    private var allowNoAssist = true
 
     private val gameStage = ObjectMap<Team, GameStage>()
 
@@ -119,6 +121,13 @@ class Main: Plugin() {
             noAssist.clear()
             whitelist.clear()
             gameStage.clear()
+
+            allowNoAssist = true
+            Vars.state.rules.objectives.forEach {
+                if (it.typeName() == "flag" && it is FlagObjective && it.flag == "forceassist") {
+                    allowNoAssist = false
+                }
+            }
 
             Vars.state.rules.revealedBlocks.addAll(Blocks.impactReactor, Blocks.carbideWall, Blocks.carbideWallLarge, Blocks.basicAssemblerModule)
             Vars.state.rules.bannedBlocks.removeAll(Seq.with(Blocks.impactReactor, Blocks.carbideWall, Blocks.carbideWallLarge, Blocks.basicAssemblerModule))
@@ -311,7 +320,7 @@ class Main: Plugin() {
 
     override fun registerClientCommands(handler: CommandHandler) {
         handler.register<Player>("noassist", "Disable assist mode") { _, player ->
-            noAssist.addUnique(player.uuid())
+            if (allowNoAssist) noAssist.addUnique(player.uuid())
         }
     }
 }
