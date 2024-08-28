@@ -56,12 +56,19 @@ tasks.register("runServer") {
     doLast {
         def path = rootProject.rootDir.toPath().resolve("run")
         Files.createDirectories(path.resolve("config/mods"))
+        Files.createDirectories(path.resolve("config/maps"))
 
         if (!Files.exists(path.resolve("server.jar"))) {
             println "Downloading Mindustry server..."
             Files.copy(
                     new URL("https://github.com/Anuken/Mindustry/releases/download/v146/server-release.jar").openStream(),
                     path.resolve("server.jar"))
+            Files.copy(
+                    rootDir.toPath().resolve("assets/testmap.msav"),
+                    path.resolve("config/maps/Forts_v1_5.msav"))
+            Files.copy(
+                    rootDir.toPath().resolve("assets/settings.bin"),
+                    path.resolve("config/settings.bin"))
         }
 
         Files.copy(

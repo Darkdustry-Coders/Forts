@@ -3,7 +3,6 @@ package forts
 import arc.Events
 import arc.graphics.Color
 import arc.struct.IntIntMap
-import arc.struct.IntMap
 import arc.struct.IntSeq
 import arc.struct.ObjectMap
 import arc.struct.Seq
@@ -74,6 +73,22 @@ fun surroundingTiles(tile: Tile, collect: Seq<Tile>): Seq<Tile> =
     if (tile.build == null) collect.clear()
     else surroundingTiles(tile.build, collect)
 
+fun occupiedTiles(tile: Tile, block: Block, collect: Seq<Tile>): Seq<Tile> {
+    collect.clear()
+
+    val x = (tile.x - block.size.toFloat().plus(.5f).div(2f).nextUp()).roundToInt()
+    val y = (tile.y - block.size.toFloat().plus(.5f).div(2f).nextUp()).roundToInt()
+
+    (1..block.size).forEach { xx ->
+        (1..block.size).forEach { yy ->
+            val tile = Vars.world.tile(xx + x, yy + y)
+            if (tile != null) collect.add(tile)
+        }
+    }
+
+    return collect
+}
+
 data class GameStage(
     var thorium: Boolean,
     var titanium: Boolean,
@@ -84,7 +99,7 @@ data class GameStage(
 }
 
 class Main: Plugin() {
-    private val LOL_NO = "[#ff3066]\uE815"
+    private val lolNo = "[#ff3066]\uE815"
 
     private val whitelist = IntSeq()
     private val noAssist = Seq<String>()
@@ -115,7 +130,13 @@ class Main: Plugin() {
 
             whitelist.removeValue(it.tile.pos())
 
-            if (it.tile.build)
+            val stage = gameStage(it.unit.team)
+            it.tile.build?.let {
+                if (it !is DrillBuild) return@let
+
+                if (it.dominantItem == Items.thorium) stage.thorium = true
+                else if (it.dominantItem == Items.titanium) stage.titanium = true
+            }
 
             if (it.tile.block() != Blocks.impactReactor) return@on
 
@@ -163,12 +184,60 @@ class Main: Plugin() {
             if (whitelist.contains(it.tile.pos())) return@addActionFilter true
 
             fun cancel() {
-                Call.label(it.player.con, LOL_NO, 1f, it.tile.getX(), it.tile.getY())
+                Call.label(it.player.con, lolNo, 1f, it.tile.getX(), it.tile.getY())
             }
 
             fun hasItem(it: PlayerAction, item: Item, count: Int): Boolean {
                 if (it.player.team().core() == null) return false
                 return it.player.team().core().items().get(item) >= count
+            }
+
+            if (it.block == Blocks.blastDrill) {
+                var stage = gameStage(it.player.team())
+                if (stage.thorium && stage.titanium) return@addActionFilter true
+
+                val item = occupiedTiles(it.tile, it.block, Seq.with())
+                    .map { it.overlay() }
+                    .filterNot { it == null || run {
+                        val drop = it.itemDrop
+                        drop == null || drop.hardness > (Blocks.blastDrill as Drill).tier && drop == (Blocks.blastDrill as Drill).blockedItem
+                    } }
+                    .fold(IntIntMap()) { map, it ->
+                        map.increment(it.itemDrop.id.toInt(), 1, 0)
+                        map
+                    }
+                    .fold(null as IntIntMap.Entry?) { item, entry ->
+                        val other = Vars.content.item(entry.key)
+
+                        if (item == null) {
+                            return@fold entry
+                        }
+
+                        val current = Vars.content.item(item.key)
+
+                        if (current.lowPriority && !other.lowPriority) return@fold entry
+                        if (item.value < entry.value) return@fold entry
+
+                        return@fold item
+                    }
+                    ?.let { Vars.content.item(it.key) }
+
+                if (stage.thorium && item == Items.thorium) {
+                    cancel()
+                    return@addActionFilter false
+                }
+
+                if (stage.titanium && item == Items.titanium) {
+                    cancel()
+                    return@addActionFilter false
+                }
+
+                if (item != Items.thorium && item != Items.titanium) {
+                    cancel()
+                    return@addActionFilter false
+                }
+
+                return@addActionFilter true
             }
 
             if (it.block == Blocks.router || it.block == Blocks.separator || it.block == Blocks.plastaniumConveyor
