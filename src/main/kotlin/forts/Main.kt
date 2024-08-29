@@ -105,7 +105,7 @@ class Main: Plugin() {
     private val whitelist = IntSeq()
     private val noAssist = Seq<String>()
     private var allowNoAssist = true
-    private var enableAssist = true
+    private var enableAssist = false
 
     private val gameStage = ObjectMap<Team, GameStage>()
 
