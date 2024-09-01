@@ -7,11 +7,13 @@ import arc.struct.IntSeq
 import arc.struct.ObjectMap
 import arc.struct.Seq
 import arc.util.CommandHandler
+import arc.util.Log
 import arc.util.Timer
 import mindustry.Vars
 import mindustry.content.Blocks
 import mindustry.content.Fx
 import mindustry.content.Items
+import mindustry.game.EventType.BlockBuildBeginEvent
 import mindustry.game.EventType.BlockBuildEndEvent
 import mindustry.game.EventType.PlayEvent
 import mindustry.game.MapObjectives.FlagObjective
@@ -102,10 +104,12 @@ data class GameStage(
 class Main: Plugin() {
     private val lolNo = "[#ff3066]\uE815"
 
+    private val warnedAssist = Seq<Player>()
     private val whitelist = IntSeq()
     private val noAssist = Seq<String>()
     private var allowNoAssist = true
-    private var enableAssist = false
+    private var enableAssist = true
+    private val disabledLints = Seq<String>()
 
     private val gameStage = ObjectMap<Team, GameStage>()
 
@@ -114,29 +118,47 @@ class Main: Plugin() {
     override fun init() {
         var game = 0
 
-        Blocks.deconstructor
-
         Events.on(PlayEvent::class.java) {
             game++
 
             noAssist.clear()
             whitelist.clear()
             gameStage.clear()
+            disabledLints.clear()
 
             allowNoAssist = true
             enableAssist = true
+
             Vars.state.rules.objectives.forEach {
-                if (it.typeName() == "flag" && it is FlagObjective && it.flag == "forceassist") {
+                if (it is FlagObjective && it.flag == "forceassist") {
                     allowNoAssist = false
+                    enableAssist = true
                 }
-                if (it.typeName() == "flag" && it is FlagObjective && it.flag == "noassist") {
-                    enableAssist = false
+                if (it is FlagObjective && it.flag == "noassist") {
+                    if (allowNoAssist) enableAssist = false
+                }
+                if (it is FlagObjective && it.flag == "disablelints") {
+                    it.details?.let { disabledLints.addAll(it.lines().map { it.trim() }) }
+                    it.text?.let { disabledLints.addAll(it.lines().map { it.trim() }) }
                 }
             }
 
             Vars.state.rules.revealedBlocks.addAll(Blocks.impactReactor, Blocks.carbideWall, Blocks.carbideWallLarge, Blocks.basicAssemblerModule)
             Vars.state.rules.bannedBlocks.removeAll(Seq.with(Blocks.impactReactor, Blocks.carbideWall, Blocks.carbideWallLarge, Blocks.basicAssemblerModule))
             Vars.state.rules.tags.put("mindurkaGamemode", "forts")
+        }
+
+        Events.on(BlockBuildBeginEvent::class.java) {
+            if (!it.breaking) return@on
+            val stage = gameStage(it.unit.team)
+            if (stage.thorium && stage.titanium) return@on
+
+            it.tile.build?.let {
+                if (it !is DrillBuild) return@let
+
+                if (it.dominantItem == Items.thorium) stage.thorium = false
+                else if (it.dominantItem == Items.titanium) stage.titanium = false
+            }
         }
 
         Events.on(BlockBuildEndEvent::class.java) {
@@ -194,6 +216,7 @@ class Main: Plugin() {
         Vars.netServer.admins.addActionFilter {
             if (it.type != Administration.ActionType.placeBlock) return@addActionFilter true
             if (it.tile.block() != Blocks.air) return@addActionFilter true
+            if (!enableAssist) return@addActionFilter true
             if (noAssist.contains(it.player.uuid())) return@addActionFilter true
             if (whitelist.contains(it.tile.pos())) return@addActionFilter true
 
@@ -206,7 +229,7 @@ class Main: Plugin() {
                 return it.player.team().core().items().get(item) >= count
             }
 
-            if (it.block == Blocks.blastDrill) {
+            if (it.block == Blocks.blastDrill && !disabledLints.contains("starter-drills")) {
                 var stage = gameStage(it.player.team())
                 if (stage.thorium && stage.titanium) return@addActionFilter true
 
@@ -254,22 +277,23 @@ class Main: Plugin() {
                 return@addActionFilter true
             }
 
-            if (it.block == Blocks.router || it.block == Blocks.separator || it.block == Blocks.plastaniumConveyor
-                || it.block == Blocks.vault || it.block == Blocks.cultivator) {
+            if ((it.block == Blocks.router || it.block == Blocks.separator || it.block == Blocks.plastaniumConveyor
+                || it.block == Blocks.vault && !disabledLints.contains("vault") || it.block == Blocks.cultivator)
+                && !disabledLints.contains("inferior-blocks")) {
                 cancel()
                 return@addActionFilter false
             }
 
-            if ((it.block == Blocks.conveyor || it.block == Blocks.titaniumConveyor
+            if (((it.block == Blocks.conveyor || it.block == Blocks.titaniumConveyor
                         || it.block == Blocks.armoredConveyor) &&
-                hasItem(it, Items.beryllium, 2)) {
+                hasItem(it, Items.beryllium, 2)) && !disabledLints.contains("serpulo-conveoyrs")) {
                 cancel()
                 return@addActionFilter false
             }
 
-            if ((it.block == Blocks.mechanicalDrill || it.block == Blocks.pneumaticDrill) &&
+            if (((it.block == Blocks.mechanicalDrill || it.block == Blocks.pneumaticDrill) &&
                 it.player.team().core().items().get(Items.thorium) >= 75 &&
-                it.player.team().core().items().get(Items.titanium) >= 50) {
+                it.player.team().core().items().get(Items.titanium) >= 50) && !disabledLints.contains("inferior-drills")) {
                 cancel()
                 return@addActionFilter false
             }
@@ -277,38 +301,44 @@ class Main: Plugin() {
             val tiles = surroundingTiles(it.tile, it.block, Seq.with())
 
             if ((it.block == Blocks.phaseWeaver) &&
-                tiles.any { b -> b.build is DrillBuild && (b.build as DrillBuild).dominantItem == Items.thorium }) {
+                tiles.any { b -> b.build is DrillBuild && (b.build as DrillBuild).dominantItem == Items.thorium }
+                && !disabledLints.contains("microwaste-res")) {
                 cancel()
                 return@addActionFilter false
             }
 
             if ((it.block == Blocks.plastaniumConveyor) &&
-                tiles.any { b -> b.build is DrillBuild && (b.build as DrillBuild).dominantItem == Items.titanium }) {
+                tiles.any { b -> b.build is DrillBuild && (b.build as DrillBuild).dominantItem == Items.titanium }
+                && !disabledLints.contains("microwaste-res")) {
                 cancel()
                 return@addActionFilter false
             }
 
             if ((it.block == Blocks.kiln) &&
-                tiles.any { b -> b.build is DrillBuild && (b.build as DrillBuild).dominantItem == Items.lead }) {
+                tiles.any { b -> b.build is DrillBuild && (b.build as DrillBuild).dominantItem == Items.lead }
+                && !disabledLints.contains("microwaste-res")) {
                 cancel()
                 return@addActionFilter false
             }
 
             if (it.block == Blocks.siliconArcFurnace &&
-                tiles.any { b -> b.block() == Blocks.graphitePress || b.block() == Blocks.multiPress }) {
+                tiles.any { b -> b.block() == Blocks.graphitePress || b.block() == Blocks.multiPress }
+                && !disabledLints.contains("microwaste-res")) {
                 cancel()
                 return@addActionFilter false
             }
 
             if (it.block == Blocks.surgeSmelter &&
                 tiles.any { b -> b.block() == Blocks.siliconArcFurnace ||
-                        b.block() == Blocks.siliconCrucible || b.block() == Blocks.siliconSmelter }) {
+                        b.block() == Blocks.siliconCrucible || b.block() == Blocks.siliconSmelter }
+                && !disabledLints.contains("microwaste-res")) {
                 cancel()
                 return@addActionFilter false
             }
 
             if ((it.block == Blocks.graphitePress || it.block == Blocks.multiPress) &&
-                tiles.any { b -> b.block() == Blocks.siliconArcFurnace }) {
+                tiles.any { b -> b.block() == Blocks.siliconArcFurnace }
+                && !disabledLints.contains("microwaste-res")) {
                 cancel()
                 return@addActionFilter false
             }
