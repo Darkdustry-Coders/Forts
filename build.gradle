@@ -18,7 +18,7 @@ compileJava.options.encoding = "UTF-8"
 repositories {
     mavenCentral()
     maven { url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
-    maven { url 'https://www.jitpack.io' }
+    maven { url 'https://jitpack.io' }
 }
 
 allprojects {
@@ -31,8 +31,9 @@ allprojects {
 dependencies {
     compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
     compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
-    annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
     testImplementation 'org.jetbrains.kotlin:kotlin-test'
+    implementation "com.github.xzxADIxzx:Useful-Stuffs:$usefulHash"
+    annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 }
 
 jar {

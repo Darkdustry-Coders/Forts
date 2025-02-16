@@ -2,11 +2,10 @@ package forts
 
 import arc.Events
 import arc.graphics.Color
+import arc.math.Mathf
 import arc.struct.IntIntMap
-import arc.struct.IntSeq
 import arc.struct.ObjectMap
 import arc.struct.Seq
-import arc.util.CommandHandler
 import arc.util.Log
 import arc.util.Timer
 import mindustry.Vars
@@ -16,21 +15,21 @@ import mindustry.content.Items
 import mindustry.game.EventType.BlockBuildBeginEvent
 import mindustry.game.EventType.BlockBuildEndEvent
 import mindustry.game.EventType.PlayEvent
-import mindustry.game.MapObjectives.FlagObjective
 import mindustry.game.Team
 import mindustry.gen.Building
 import mindustry.gen.Call
-import mindustry.gen.Player
+import mindustry.graphics.CacheLayer
 import mindustry.mod.Plugin
-import mindustry.net.Administration
-import mindustry.net.Administration.PlayerAction
-import mindustry.type.Item
 import mindustry.world.Block
 import mindustry.world.Tile
-import mindustry.world.blocks.production.Drill
 import mindustry.world.blocks.production.Drill.DrillBuild
+import mindustry.world.blocks.ConstructBlock
 import kotlin.math.nextUp
 import kotlin.math.roundToInt
+import forts.mapBlockModifiers
+import mindustry.content.UnitTypes
+import mindustry.type.Item
+import mindustry.world.blocks.defense.turrets.ItemTurret
 
 fun surroundingTiles(tile: Tile, block: Block, collect: Seq<Tile>): Seq<Tile> {
     collect.clear()
@@ -102,79 +101,41 @@ data class GameStage(
 }
 
 class Main: Plugin() {
-    private val lolNo = "[#ff3066]\uE815"
-
-    private val warnedAssist = Seq<Player>()
-    private val whitelist = IntSeq()
-    private val noAssist = Seq<String>()
-    private var allowNoAssist = true
-    private var enableAssist = true
-    private val disabledLints = Seq<String>()
-
-    private val gameStage = ObjectMap<Team, GameStage>()
-
-    private fun gameStage(team: Team) = gameStage.get(team) { GameStage.default() }
-
     override fun init() {
         var game = 0
 
+        initModifiers()
+
         Events.on(PlayEvent::class.java) {
             game++
-
-            noAssist.clear()
-            whitelist.clear()
-            gameStage.clear()
-            disabledLints.clear()
-
-            allowNoAssist = true
-            enableAssist = true
-
-            Vars.state.rules.objectives.forEach {
-                if (it is FlagObjective && it.flag == "forceassist") {
-                    allowNoAssist = false
-                    enableAssist = true
-                }
-                if (it is FlagObjective && it.flag == "noassist") {
-                    if (allowNoAssist) enableAssist = false
-                }
-                if (it is FlagObjective && it.flag == "disablelints") {
-                    it.details?.let { disabledLints.addAll(it.lines().map { it.trim() }) }
-                    it.text?.let { disabledLints.addAll(it.lines().map { it.trim() }) }
-                }
-            }
 
             Vars.state.rules.revealedBlocks.addAll(Blocks.impactReactor, Blocks.carbideWall, Blocks.carbideWallLarge, Blocks.basicAssemblerModule)
             Vars.state.rules.bannedBlocks.removeAll(Seq.with(Blocks.impactReactor, Blocks.carbideWall, Blocks.carbideWallLarge, Blocks.basicAssemblerModule))
             Vars.state.rules.tags.put("mindurkaGamemode", "forts")
         }
 
-        Events.on(BlockBuildBeginEvent::class.java) {
-            if (!it.breaking) return@on
-            val stage = gameStage(it.unit.team)
-            if (stage.thorium && stage.titanium) return@on
-
-            it.tile.build?.let {
-                if (it !is DrillBuild) return@let
-
-                if (it.dominantItem == Items.thorium) stage.thorium = false
-                else if (it.dominantItem == Items.titanium) stage.titanium = false
-            }
-        }
-
         Events.on(BlockBuildEndEvent::class.java) {
             if (it.breaking) return@on
 
-            whitelist.removeValue(it.tile.pos())
+            val rot = if (it.tile.block().hasBuilding()) { it.tile.build.rotation } else { 0 }
+            var block: Block? = it.tile.block()
 
-            val stage = gameStage(it.unit.team)
-            it.tile.build?.let {
-                if (it !is DrillBuild) return@let
+            block = mapBlockModifiers(it.tile, block!!)
 
-                if (it.dominantItem == Items.thorium) stage.thorium = true
-                else if (it.dominantItem == Items.titanium) stage.titanium = true
+            if (block != Blocks.impactReactor) {
+                if (it.tile.block() != block) {
+                    Timer.schedule({
+                        it.tile.setNet(block ?: Blocks.air, it.tile.team(), rot)
+                        blockPlacedModifiers(it.tile)
+                    }, 0.1f)
+                }
+                else {
+                    Timer.schedule({
+                        blockPlacedModifiers(it.tile)
+                    }, 0.1f)
+                }
+                return@on
             }
-
-            if (it.tile.block() != Blocks.impactReactor) return@on
 
             val currentGame = game
 
@@ -182,7 +143,8 @@ class Main: Plugin() {
                 if (currentGame != game) return@schedule
                 if (it.tile.block() != Blocks.impactReactor) return@schedule
 
-                it.tile.setNet(Blocks.largeShieldProjector, it.tile.team(), 0)
+                it.tile.setNet(Blocks.largeShieldProjector, it.tile.team(), rot)
+                blockPlacedModifiers(it.tile)
                 Call.effect(
                     Fx.spawn,
                     it.tile.getX(), it.tile.getY(), 0f,
@@ -212,150 +174,11 @@ class Main: Plugin() {
         }
 
         CustomDestructor.load()
-
-        Vars.netServer.admins.addActionFilter {
-            if (it.type != Administration.ActionType.placeBlock) return@addActionFilter true
-            if (it.tile.block() != Blocks.air) return@addActionFilter true
-            if (!enableAssist) return@addActionFilter true
-            if (noAssist.contains(it.player.uuid())) return@addActionFilter true
-            if (whitelist.contains(it.tile.pos())) return@addActionFilter true
-
-            fun cancel() {
-                Call.label(it.player.con, lolNo, 1f, it.tile.getX(), it.tile.getY())
-            }
-
-            fun hasItem(it: PlayerAction, item: Item, count: Int): Boolean {
-                if (it.player.team().core() == null) return false
-                return it.player.team().core().items().get(item) >= count
-            }
-
-            if (it.block == Blocks.blastDrill && !disabledLints.contains("starter-drills")) {
-                var stage = gameStage(it.player.team())
-                if (stage.thorium && stage.titanium) return@addActionFilter true
-
-                val item = occupiedTiles(it.tile, it.block, Seq.with())
-                    .map { it.overlay() }
-                    .filterNot { it == null || run {
-                        val drop = it.itemDrop
-                        drop == null || drop.hardness > (Blocks.blastDrill as Drill).tier && drop == (Blocks.blastDrill as Drill).blockedItem
-                    } }
-                    .fold(IntIntMap()) { map, it ->
-                        map.increment(it.itemDrop.id.toInt(), 1, 0)
-                        map
-                    }
-                    .fold(null as IntIntMap.Entry?) { item, entry ->
-                        val other = Vars.content.item(entry.key)
-
-                        if (item == null) {
-                            return@fold entry
-                        }
-
-                        val current = Vars.content.item(item.key)
-
-                        if (current.lowPriority && !other.lowPriority) return@fold entry
-                        if (item.value < entry.value) return@fold entry
-
-                        return@fold item
-                    }
-                    ?.let { Vars.content.item(it.key) }
-
-                if (stage.thorium && item == Items.thorium) {
-                    cancel()
-                    return@addActionFilter false
-                }
-
-                if (stage.titanium && item == Items.titanium) {
-                    cancel()
-                    return@addActionFilter false
-                }
-
-                if (item != Items.thorium && item != Items.titanium) {
-                    cancel()
-                    return@addActionFilter false
-                }
-
-                return@addActionFilter true
-            }
-
-            if ((it.block == Blocks.router || it.block == Blocks.separator || it.block == Blocks.plastaniumConveyor
-                || it.block == Blocks.vault && !disabledLints.contains("vault") || it.block == Blocks.cultivator)
-                && !disabledLints.contains("inferior-blocks")) {
-                cancel()
-                return@addActionFilter false
-            }
-
-            if (((it.block == Blocks.conveyor || it.block == Blocks.titaniumConveyor
-                        || it.block == Blocks.armoredConveyor) &&
-                hasItem(it, Items.beryllium, 2)) && !disabledLints.contains("serpulo-conveoyrs")) {
-                cancel()
-                return@addActionFilter false
-            }
-
-            if (((it.block == Blocks.mechanicalDrill || it.block == Blocks.pneumaticDrill) &&
-                it.player.team().core().items().get(Items.thorium) >= 75 &&
-                it.player.team().core().items().get(Items.titanium) >= 50) && !disabledLints.contains("inferior-drills")) {
-                cancel()
-                return@addActionFilter false
-            }
-
-            val tiles = surroundingTiles(it.tile, it.block, Seq.with())
-
-            if ((it.block == Blocks.phaseWeaver) &&
-                tiles.any { b -> b.build is DrillBuild && (b.build as DrillBuild).dominantItem == Items.thorium }
-                && !disabledLints.contains("microwaste-res")) {
-                cancel()
-                return@addActionFilter false
-            }
-
-            if ((it.block == Blocks.plastaniumConveyor) &&
-                tiles.any { b -> b.build is DrillBuild && (b.build as DrillBuild).dominantItem == Items.titanium }
-                && !disabledLints.contains("microwaste-res")) {
-                cancel()
-                return@addActionFilter false
-            }
-
-            if ((it.block == Blocks.kiln) &&
-                tiles.any { b -> b.build is DrillBuild && (b.build as DrillBuild).dominantItem == Items.lead }
-                && !disabledLints.contains("microwaste-res")) {
-                cancel()
-                return@addActionFilter false
-            }
-
-            if (it.block == Blocks.siliconArcFurnace &&
-                tiles.any { b -> b.block() == Blocks.graphitePress || b.block() == Blocks.multiPress }
-                && !disabledLints.contains("microwaste-res")) {
-                cancel()
-                return@addActionFilter false
-            }
-
-            if (it.block == Blocks.surgeSmelter &&
-                tiles.any { b -> b.block() == Blocks.siliconArcFurnace ||
-                        b.block() == Blocks.siliconCrucible || b.block() == Blocks.siliconSmelter }
-                && !disabledLints.contains("microwaste-res")) {
-                cancel()
-                return@addActionFilter false
-            }
-
-            if ((it.block == Blocks.graphitePress || it.block == Blocks.multiPress) &&
-                tiles.any { b -> b.block() == Blocks.siliconArcFurnace }
-                && !disabledLints.contains("microwaste-res")) {
-                cancel()
-                return@addActionFilter false
-            }
-
-            whitelist.add(it.tile.pos())
-
-            true
-        }
-
-        Timer.schedule({
-            whitelist.clear()
-        }, 1f, 1f)
-    }
-
-    override fun registerClientCommands(handler: CommandHandler) {
-        handler.register<Player>("noassist", "Disable assist mode") { _, player ->
-            if (allowNoAssist) noAssist.addUnique(player.uuid())
-        }
+        UnitTypes.poly.health = 90f
+        UnitTypes.flare.health = 150f
+        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.metaglass).splashDamage = 50f
+        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.blastCompound).splashDamage = 80f
+        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.plastanium).splashDamage = 60f
+        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.surgeAlloy).splashDamage = 95f
     }
 }
