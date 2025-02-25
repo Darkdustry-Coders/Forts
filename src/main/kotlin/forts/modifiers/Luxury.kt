@@ -18,4 +18,8 @@ class Luxury: Modifier() {
             }
         }
     }
+
+    override fun destroy() {
+        Vars.state.rules.buildCostMultiplier /= 2f
+    }
 }

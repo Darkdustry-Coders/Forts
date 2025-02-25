@@ -32,7 +32,6 @@ dependencies {
     compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
     compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
     testImplementation 'org.jetbrains.kotlin:kotlin-test'
-    implementation "com.github.xzxADIxzx:Useful-Stuffs:$usefulHash"
     annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 }
 

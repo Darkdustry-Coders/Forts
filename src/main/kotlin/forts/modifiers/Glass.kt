@@ -25,4 +25,9 @@ class Glass: Modifier() {
             it.unit.health(10f)
         }
     }
+
+    override fun destroy() {
+        Vars.state.rules.unitDamageMultiplier /= 4f;
+        Vars.state.rules.unitCrashDamageMultiplier /= 4f;
+    }
 }

@@ -6,8 +6,10 @@ import arc.math.Mathf
 import arc.struct.IntIntMap
 import arc.struct.ObjectMap
 import arc.struct.Seq
+import arc.util.CommandHandler
 import arc.util.Log
 import arc.util.Timer
+import buj.tl.Tl
 import mindustry.Vars
 import mindustry.content.Blocks
 import mindustry.content.Fx
@@ -28,6 +30,7 @@ import kotlin.math.nextUp
 import kotlin.math.roundToInt
 import forts.mapBlockModifiers
 import mindustry.content.UnitTypes
+import mindustry.game.EventType
 import mindustry.type.Item
 import mindustry.world.blocks.defense.turrets.ItemTurret
 
@@ -105,6 +108,7 @@ class Main: Plugin() {
         var game = 0
 
         initModifiers()
+        Tl.init(javaClass.classLoader)
 
         Events.on(PlayEvent::class.java) {
             game++
@@ -173,12 +177,38 @@ class Main: Plugin() {
             }, 0.1f)
         }
 
+        Events.on(EventType.GameOverEvent::class.java) { gameOver() }
+
         CustomDestructor.load()
         UnitTypes.poly.health = 90f
         UnitTypes.flare.health = 150f
-        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.metaglass).splashDamage = 50f
-        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.blastCompound).splashDamage = 80f
-        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.plastanium).splashDamage = 60f
-        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.surgeAlloy).splashDamage = 95f
+        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.metaglass).splashDamage = 65f
+        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.blastCompound).splashDamage = 100f
+        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.plastanium).splashDamage = 95f
+        (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.surgeAlloy).splashDamage = 125f
+        (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).buildingDamageMultiplier = 0.5f
+        (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).splashDamage = 250f
+        (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).splashDamagePierce = true
+    }
+
+    override fun registerServerCommands(handler: CommandHandler) {
+        handler.register("modifiers", "Show currently active modifiers") {
+            Log.info("Active modifiers:")
+            if (activeModifiers().isEmpty) Log.info("<none>")
+            activeModifiers().each { Log.info("- ${it.getName()}") }
+        }
+
+        handler.register("modifier-add", "<modifiers...>", "Add modifiers") {
+            val target = it[0]!!.split(' ')
+            val available = availableModifiers()
+                .select { !activeModifiers().any { other -> other.javaClass == it.source.java } }
+                .select { target.any { name -> name == it.source.java.simpleName.lowercase()} }
+            available.each { addModifier(it.create.get()) }
+        }
+
+        handler.register("modifier-rem", "<modifiers...>", "Remove modifiers") {
+            val target = it[0]!!.split(' ')
+            removeModifiers { mod -> target.any { it == mod.getName() } }
+        }
     }
 }

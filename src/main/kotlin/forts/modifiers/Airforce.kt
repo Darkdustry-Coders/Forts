@@ -14,6 +14,10 @@ import mindustry.world.blocks.payloads.BuildPayload
 class Airforce: Modifier() {
     override fun chance() = 0.1f
 
+    init {
+        priority = 50
+    }
+
     override fun start() {
         Vars.state.rules.unitPayloadUpdate = true
     }
@@ -36,6 +40,7 @@ class Airforce: Modifier() {
                 Vars.state.rules.blockHealthMultiplier *
                 Vars.state.rules.teams.get(tile.team()).blockHealthMultiplier
         unit.health = tile.build.health()
+        if (unit.health < 2f) unit.health = 2f
         Vars.state.rules.unitCap = limit
         Vars.state.rules.unitCapVariable = dyn
         if (unit == null) {

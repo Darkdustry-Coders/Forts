@@ -4,15 +4,24 @@ import mindustry.game.EventType
 import mindustry.world.Tile
 import mindustry.world.Block
 import arc.Events
+import arc.func.Boolf
 import arc.func.Cons
+import arc.func.Prov
 import arc.struct.Seq
 import arc.math.Mathf
 import arc.util.Log
 import arc.util.Timer
+import buj.tl.Tl
+import mindustry.Vars
+import mindustry.gen.Call
+import mindustry.gen.Groups
+import kotlin.reflect.KClass
 
 abstract class Modifier {
     protected val eventsToRemove = HashMap<Class<*>, Seq<Cons<*>>>()
     protected val timersToRemove = Seq<Timer.Task>()
+
+    var priority = 100
 
     protected inline fun <reified T> registerEvent(handler: Cons<T>) {
         Events.on<T>(T::class.java, handler)
@@ -52,7 +61,55 @@ abstract class Modifier {
     }
 }
 
+fun Modifier.getName() = this.javaClass.simpleName.lowercase()
+
 private val modifiers = Seq<Modifier>()
+
+class AvailableModifier<T: Modifier>(val source: KClass<T>, val create: Prov<T>) {
+    @Suppress("UNCHECKED_CAST")
+    fun upcast(): AvailableModifier<Modifier> {
+        return this as AvailableModifier<Modifier>
+    }
+}
+
+fun availableModifiers(): Seq<AvailableModifier<Modifier>> {
+    val mods = Seq<AvailableModifier<Modifier>>()
+    mods.add(AvailableModifier(forts.modifiers.Crazy::class) { forts.modifiers.Crazy() }.upcast())
+    mods.add(AvailableModifier(forts.modifiers.Fragile::class) { forts.modifiers.Fragile() }.upcast())
+    mods.add(AvailableModifier(forts.modifiers.ResourceFlood::class) { forts.modifiers.ResourceFlood() }.upcast())
+    mods.add(AvailableModifier(forts.modifiers.Overkill::class) { forts.modifiers.Overkill() }.upcast())
+    mods.add(AvailableModifier(forts.modifiers.Paper::class) { forts.modifiers.Paper() }.upcast())
+    mods.add(AvailableModifier(forts.modifiers.Buildup::class) { forts.modifiers.Buildup() }.upcast())
+    mods.add(AvailableModifier(forts.modifiers.Unstable::class) { forts.modifiers.Unstable() }.upcast())
+    mods.add(AvailableModifier(forts.modifiers.Glass::class) { forts.modifiers.Glass() }.upcast())
+    mods.add(AvailableModifier(forts.modifiers.Decay::class) { forts.modifiers.Decay() }.upcast())
+    mods.add(AvailableModifier(forts.modifiers.Luxury::class) { forts.modifiers.Luxury() }.upcast())
+    mods.add(AvailableModifier(forts.modifiers.Airforce::class) { forts.modifiers.Airforce() }.upcast())
+    return mods
+}
+fun activeModifiers(): Seq<Modifier> = modifiers
+fun addModifier(modifier: Modifier) {
+    modifiers.add(modifier)
+    modifier.start()
+    Log.info("Enabled modifier ${modifier.getName()}")
+    Call.setRules(Vars.state.rules)
+    modifiers.sort { a, b -> b.priority - a.priority }
+}
+fun removeModifiers(cb: Boolf<Modifier>) {
+    val prevLen = modifiers.size
+    if (modifiers.removeAll {
+        if (cb.get(it)) {
+            it.destroy()
+            it.finalDestroy()
+            Log.info("Disabled modifier ${it.getName()}")
+            return@removeAll true
+        }
+        return@removeAll false
+    }.size != prevLen) {
+        Call.setRules(Vars.state.rules)
+        modifiers.sort { a, b -> b.priority - a.priority }
+    }
+}
 
 fun mapBlockModifiers(tile: Tile, block: Block): Block? {
     var b: Block? = block
@@ -70,22 +127,14 @@ fun blockPlacedModifiers(tile: Tile) {
 }
 
 fun initModifiers() {
-    Events.on(EventType.PlayEvent::class.java) {
+    Events.on(EventType.WorldLoadBeginEvent::class.java) {
         modifiers.each { it.destroy() }
         modifiers.each { it.finalDestroy() }
         modifiers.clear()
+    }
 
-        modifiers.add(forts.modifiers.Crazy())
-        modifiers.add(forts.modifiers.Fragile())
-        modifiers.add(forts.modifiers.ResourceFlood())
-        modifiers.add(forts.modifiers.Paper())
-        modifiers.add(forts.modifiers.Buildup())
-        modifiers.add(forts.modifiers.Unstable())
-        modifiers.add(forts.modifiers.Overkill())
-        modifiers.add(forts.modifiers.Glass())
-        modifiers.add(forts.modifiers.Airforce())
-        modifiers.add(forts.modifiers.Decay())
-        modifiers.add(forts.modifiers.Luxury())
+    Events.on(EventType.PlayEvent::class.java) {
+        availableModifiers().each { modifiers.add(it.create.get()) }
 
         if (modifiers.contains { it is forts.modifiers.Decay } && modifiers.contains { it is forts.modifiers.Paper }) {
             if (Mathf.randomBoolean()) modifiers.remove { it is forts.modifiers.Decay }
@@ -93,12 +142,22 @@ fun initModifiers() {
         }
 
         modifiers.removeAll { it.chance() < Mathf.random() }
+        modifiers.sort { a, b -> b.priority - a.priority }
 
         modifiers.each { it.start() }
-        modifiers.each { Log.info("yoo ${it.javaClass.simpleName.lowercase()}") }
+        modifiers.each { Log.info("yoo ${it.getName()}") }
     }
 }
 
 fun gameOver() {
     if (modifiers.isEmpty) return
+
+    for (player in Groups.player) {
+        Tl.send(player).done("{forts.notice.modifiers}")
+        for (modifier in modifiers) {
+            val m = modifier.javaClass.simpleName.lowercase()
+            player.sendMessage("[red]- [yellow]${Tl.fmtFor(player).done("{forts.modifiers.${m}.name}")}")
+            player.sendMessage("[gray]${Tl.fmtFor(player).done("{forts.modifiers.${m}.desc}")}")
+        }
+    }
 }

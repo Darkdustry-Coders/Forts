@@ -14,4 +14,9 @@ class Fragile: Modifier() {
         Vars.state.rules.unitHealthMultiplier /= 2f
         Vars.state.rules.blockHealthMultiplier /= 2f
     }
+
+    override fun destroy() {
+        Vars.state.rules.unitHealthMultiplier *= 2f
+        Vars.state.rules.blockHealthMultiplier *= 2f
+    }
 }
