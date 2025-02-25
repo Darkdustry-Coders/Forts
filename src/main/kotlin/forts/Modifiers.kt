@@ -134,6 +134,8 @@ fun initModifiers() {
     }
 
     Events.on(EventType.PlayEvent::class.java) {
+        if (Mathf.random() < 0.7) return@on
+
         availableModifiers().each { modifiers.add(it.create.get()) }
 
         if (modifiers.contains { it is forts.modifiers.Decay } && modifiers.contains { it is forts.modifiers.Paper }) {
@@ -156,8 +158,7 @@ fun gameOver() {
         Tl.send(player).done("{forts.notice.modifiers}")
         for (modifier in modifiers) {
             val m = modifier.javaClass.simpleName.lowercase()
-            player.sendMessage("[red]- [yellow]${Tl.fmtFor(player).done("{forts.modifiers.${m}.name}")}")
-            player.sendMessage("[gray]${Tl.fmtFor(player).done("{forts.modifiers.${m}.desc}")}")
+            Tl.send(player).done("[red]- [yellow]{forts.modifiers.${m}.name}\n{forts.modifiers.${m}.desc}")
         }
     }
 }

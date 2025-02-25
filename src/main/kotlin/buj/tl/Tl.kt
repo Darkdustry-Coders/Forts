@@ -87,7 +87,7 @@ private class LocaleFile {
     private val tls = ObjectMap<String, String>()
 }
 
-class LCtx {
+class LCtx(private val parent: LCtx? = null) {
     private val tls = ObjectMap<String, String>()
     private val tlsRaw = ObjectMap<String, String>()
 
@@ -108,7 +108,7 @@ class LCtx {
     fun tlKey(key: String, lang: String): String {
         if (tlsRaw.containsKey(key)) return tlsRaw.get(key)!!
         if (tls.containsKey(key)) return tl(tls.get(key)!!, lang)
-        return tl(LocaleFile.get(lang, key), lang)
+        return tl(if (parent == null) LocaleFile.get(lang, key) else parent.tlKey(key, lang), lang)
     }
 
     fun tl(text: String, lang: String): String {
@@ -126,6 +126,7 @@ class LCtx {
                 if (o == -1) return "tl error: unenclosed interpolation"
                 val key = currentText.substring(i + 1..o - 1)
                 currentText = currentText.substring(0..i - 1) +
+                        // TODO: tl the key
                         tlKey(key, lang) +
                         currentText.substring(o + 1)
             }
@@ -198,7 +199,9 @@ class Lc(val player: Player, val ctx: LCtx = LCtx()): L<Lc> {
 
     fun done(key: String) {
         val l = Ls(player.locale, ctx)
-        player.sendMessage(l.done(key))
+        for (line in l.done(key).lines()) {
+            player.sendMessage(line)
+        }
     }
 }
 class Ls(val locale: String, val ctx: LCtx = LCtx()): L<Ls> {
