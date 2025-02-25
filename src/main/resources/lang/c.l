@@ -3,7 +3,7 @@ notice.modifiers = [cyan]Enabled modifiers:
 
 [forts.modifiers]
 airforce.name = Airforce
-airforce.desc = All built turrets are held by {count} units.
+airforce.desc = All built turrets are held by units.
 
 buildup.name = Buildup
 buildup.desc = All buildings are built heavily damaged.
