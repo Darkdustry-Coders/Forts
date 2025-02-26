@@ -13,6 +13,7 @@ import arc.util.Log
 import arc.util.Timer
 import buj.tl.Tl
 import mindustry.Vars
+import mindustry.game.MapObjectives
 import mindustry.gen.Call
 import mindustry.gen.Groups
 import kotlin.reflect.KClass
@@ -135,8 +136,25 @@ fun initModifiers() {
 
     Events.on(EventType.PlayEvent::class.java) {
         if (Mathf.random() < 0.7) return@on
+        if (Vars.state.rules.objectives.any { it is MapObjectives.FlagObjective && it.flag == "nomodifiers" }) return@on
 
         availableModifiers().each { modifiers.add(it.create.get()) }
+
+        Vars.state.rules.objectives.each {
+            if (it !is MapObjectives.FlagObjective) return@each
+            if (it.flag != "disablemodifiers") return@each
+
+            it.details?.let {
+                for (line in it.lines()) {
+                    modifiers.removeAll { it.getName() == line.trim() }
+                }
+            }
+            it.text?.let {
+                for (line in it.lines()) {
+                    modifiers.removeAll { it.getName() == line.trim() }
+                }
+            }
+        }
 
         if (modifiers.contains { it is forts.modifiers.Decay } && modifiers.contains { it is forts.modifiers.Paper }) {
             if (Mathf.randomBoolean()) modifiers.remove { it is forts.modifiers.Decay }
