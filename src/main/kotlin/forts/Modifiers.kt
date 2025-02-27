@@ -172,11 +172,7 @@ fun initModifiers() {
 fun gameOver() {
     if (modifiers.isEmpty) return
 
-    for (player in Groups.player) {
-        Tl.send(player).done("{forts.notice.modifiers}")
-        for (modifier in modifiers) {
-            val m = modifier.javaClass.simpleName.lowercase()
-            Tl.send(player).put("modifier", m).done("{forts.test}")
-        }
-    }
+    Tl.broadcast()
+        .put("modifiers", modifiers.map { it.javaClass.simpleName.lowercase() }.joinToString(","))
+        .done("{forts.notice.modifiers}")
 }

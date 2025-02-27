@@ -289,6 +289,23 @@ private class ScrKey(val key: Script): Script {
     override fun debug(): String = "Key(${key.debug()})"
 }
 
+private class ScrEach(val key: String, val source: Script, val template: Script, val separator: Script, val join: Script): Script {
+    override fun append(ctx: LCtx, source: String, lang: String): String {
+        var txt = source
+        var first = true
+        for (name in this.source.append(ctx, "", lang).split(separator.append(ctx, "", lang))) {
+            if (first) first = false
+            else txt = join.append(ctx, txt, lang)
+            val lctx = LCtx(ctx)
+            lctx.put(key, name)
+            txt = template.append(lctx, txt, lang)
+        }
+        return txt
+    }
+
+    override fun debug(): String = "Each($key in ${source.debug()} split ${separator.debug()} join ${join.debug()})"
+}
+
 private fun parseUnicode(script: String, idx: Array<Int>): Char {
     var num = 0
     if (idx[0] >= script.length || script[idx[0]] != '{') throw RuntimeException("invalid unicode escape")
@@ -306,9 +323,143 @@ private fun parseUnicode(script: String, idx: Array<Int>): Char {
     return num.toChar()
 }
 
+private fun parseEach(script: String, idx: Array<Int>): Script {
+    // TODO: {each {name} in {key} (<template>) split (<sep>) join (<sep>) [...if (<cond>)]}
+
+    if (!script.startsWith("{each", idx[0])) throw RuntimeException("not an each expression")
+    idx[0] += "{each".length - 1
+
+    do idx[0]++ while (idx[0] < script.length && script[idx[0]].isWhitespace())
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    if (script[idx[0]] != '{') throw RuntimeException("unexpected char '${script[idx[0]]}'")
+
+    var key = ""
+    while (++idx[0] < script.length && (script[idx[0]].isLetter() || script[idx[0]].isDigit() || "-_.".contains(script[idx[0]]))) key += script[idx[0]]
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    if (script[idx[0]] != '}') throw RuntimeException("unexpected char '${script[idx[0]]}'")
+
+    do idx[0]++ while (idx[0] < script.length && script[idx[0]].isWhitespace())
+    if (!script.startsWith("in", idx[0])) throw RuntimeException("couldn't find \"in\" expression")
+    idx[0]++
+
+    do idx[0]++ while (idx[0] < script.length && script[idx[0]].isWhitespace())
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    if (script[idx[0]] != '{') throw RuntimeException("unexpected char '${script[idx[0]]}'")
+
+    var sourceStr = "{"
+    var depth = 1
+    var backspace = false
+    while (++idx[0] < script.length && depth > 0) {
+        if (backspace) {
+            backspace = false
+            if (!"{}\\".contains(script[idx[0]])) sourceStr += '\\'
+            sourceStr += script[idx[0]]
+            continue
+        }
+        when (script[idx[0]]) {
+            '\\' -> { backspace = true; continue }
+            '{' -> depth++
+            '}' -> depth--
+        }
+        sourceStr += script[idx[0]]
+    }
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    val source = Tl.parse(sourceStr)
+
+    do idx[0]++ while (idx[0] < script.length && script[idx[0]].isWhitespace())
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    if (script[idx[0]] != '(') throw RuntimeException("unexpected char '${script[idx[0]]}'")
+
+    var templateStr = ""
+    depth = 1
+    backspace = false
+    while (++idx[0] < script.length) {
+        if (backspace) {
+            backspace = false
+            if (!"()\\".contains(script[idx[0]])) templateStr += '\\'
+            templateStr += script[idx[0]]
+            continue
+        }
+        when (script[idx[0]]) {
+            '\\' -> { backspace = true; continue }
+            '(' -> depth++
+            ')' -> depth--
+        }
+        if (depth > 0) templateStr += script[idx[0]]
+        else break
+    }
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    val template = Tl.parse(templateStr)
+
+    do idx[0]++ while (idx[0] < script.length && script[idx[0]].isWhitespace())
+    if (!script.startsWith("split", idx[0])) throw RuntimeException("couldn't find \"split\" expression")
+    idx[0] += 4
+
+    do idx[0]++ while (idx[0] < script.length && script[idx[0]].isWhitespace())
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    if (script[idx[0]] != '(') throw RuntimeException("unexpected char '${script[idx[0]]}'")
+
+    var splitStr = ""
+    depth = 1
+    backspace = false
+    while (++idx[0] < script.length) {
+        if (backspace) {
+            backspace = false
+            if (!"()\\".contains(script[idx[0]])) splitStr += '\\'
+            splitStr += script[idx[0]]
+            continue
+        }
+        when (script[idx[0]]) {
+            '\\' -> { backspace = true; continue }
+            '(' -> depth++
+            ')' -> depth--
+        }
+        if (depth > 0) splitStr += script[idx[0]]
+        else break
+    }
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    val split = Tl.parse(splitStr)
+
+    do idx[0]++ while (idx[0] < script.length && script[idx[0]].isWhitespace())
+    if (!script.startsWith("join", idx[0])) throw RuntimeException("couldn't find \"join\" expression")
+    idx[0] += 3
+
+    do idx[0]++ while (idx[0] < script.length && script[idx[0]].isWhitespace())
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    if (script[idx[0]] != '(') throw RuntimeException("unexpected char '${script[idx[0]]}'")
+
+    var joinStr = ""
+    depth = 1
+    backspace = false
+    while (++idx[0] < script.length) {
+        if (backspace) {
+            backspace = false
+            if (!"()\\".contains(script[idx[0]])) joinStr += '\\'
+            joinStr += script[idx[0]]
+            continue
+        }
+        when (script[idx[0]]) {
+            '\\' -> { backspace = true; continue }
+            '(' -> depth++
+            ')' -> depth--
+        }
+        if (depth > 0) joinStr += script[idx[0]]
+        else break
+    }
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    val join = Tl.parse(joinStr)
+
+    do idx[0]++ while (idx[0] < script.length && script[idx[0]].isWhitespace())
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed each expression")
+    if (script[idx[0]++] != '}') throw RuntimeException("unexpected char '${script[idx[0]]}'")
+
+    return ScrEach(key, source, template, split, join)
+}
+
 private fun parseKey(script: String, idx: Array<Int>): Script {
     // TODO: {if (<cond>) () ..else if (<cond>) () ..else ()}
-    // TODO: {each ({name} in {key} split (<sep>) [join (<sep>)]}
+
+    if (script.startsWith("{each{", idx[0]) || script.startsWith("{each ", idx[0])) return parseEach(script, idx);
 
     if (idx[0] >= script.length || script[idx[0]++] != '{') throw RuntimeException("invalid key sequence")
     var text = ""
@@ -344,11 +495,12 @@ private fun parseRoot(script: String, idx: Array<Int>): Script {
         if (backslash) {
             backslash = false
 
-            if (ch == 'u') {
-                text += parseUnicode(script, idx)
+            text += when (ch) {
+                'u' -> parseUnicode(script, idx)
+                'n' -> '\n'
+                else -> ch
             }
 
-            text += ch
             continue
         }
 

@@ -1,8 +1,9 @@
 [forts]
-notice.modifiers = [cyan]Enabled
-                 : modifiers:
-test = [red]- [yellow]{forts.modifiers.{modifier}.name}
-     = {forts.modifiers.{modifier}.desc}
+notice.modifiers = [cyan]Enabled modifiers:
+                 = {each {modifier} in {modifiers}
+                 = ([red]- [yellow]{forts.modifiers.{modifier}.name}
+                 = {forts.modifiers.{modifier}.desc})
+                 = split (,) join (\n)}
 
 [forts.modifiers]
 airforce.name = Airforce
