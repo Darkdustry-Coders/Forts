@@ -1,5 +1,8 @@
 [forts]
-notice.modifiers = [cyan]Enabled modifiers:
+notice.modifiers = [cyan]Enabled
+                 : modifiers:
+test = [red]- [yellow]{forts.modifiers.{modifier}.name}
+     = {forts.modifiers.{modifier}.desc}
 
 [forts.modifiers]
 airforce.name = Airforce

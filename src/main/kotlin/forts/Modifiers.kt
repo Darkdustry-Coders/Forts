@@ -176,7 +176,7 @@ fun gameOver() {
         Tl.send(player).done("{forts.notice.modifiers}")
         for (modifier in modifiers) {
             val m = modifier.javaClass.simpleName.lowercase()
-            Tl.send(player).done("[red]- [yellow]{forts.modifiers.${m}.name}\n{forts.modifiers.${m}.desc}")
+            Tl.send(player).put("modifier", m).done("{forts.test}")
         }
     }
 }
