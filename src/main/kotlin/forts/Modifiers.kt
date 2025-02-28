@@ -15,7 +15,6 @@ import buj.tl.Tl
 import mindustry.Vars
 import mindustry.game.MapObjectives
 import mindustry.gen.Call
-import mindustry.gen.Groups
 import kotlin.reflect.KClass
 
 abstract class Modifier {

@@ -2,9 +2,6 @@ package forts
 
 import arc.Events
 import arc.graphics.Color
-import arc.math.Mathf
-import arc.struct.IntIntMap
-import arc.struct.ObjectMap
 import arc.struct.Seq
 import arc.util.CommandHandler
 import arc.util.Log
@@ -14,24 +11,18 @@ import mindustry.Vars
 import mindustry.content.Blocks
 import mindustry.content.Fx
 import mindustry.content.Items
-import mindustry.game.EventType.BlockBuildBeginEvent
 import mindustry.game.EventType.BlockBuildEndEvent
 import mindustry.game.EventType.PlayEvent
 import mindustry.game.Team
 import mindustry.gen.Building
 import mindustry.gen.Call
-import mindustry.graphics.CacheLayer
 import mindustry.mod.Plugin
 import mindustry.world.Block
 import mindustry.world.Tile
-import mindustry.world.blocks.production.Drill.DrillBuild
-import mindustry.world.blocks.ConstructBlock
 import kotlin.math.nextUp
 import kotlin.math.roundToInt
-import forts.mapBlockModifiers
 import mindustry.content.UnitTypes
 import mindustry.game.EventType
-import mindustry.type.Item
 import mindustry.world.blocks.defense.turrets.ItemTurret
 
 fun surroundingTiles(tile: Tile, block: Block, collect: Seq<Tile>): Seq<Tile> {

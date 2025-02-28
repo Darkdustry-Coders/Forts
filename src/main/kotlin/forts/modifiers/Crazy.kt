@@ -7,12 +7,13 @@ import mindustry.world.blocks.ConstructBlock
 import mindustry.Vars
 import arc.struct.IntIntMap
 import arc.math.Mathf
+import mindustry.content.Blocks
 
 class Crazy: Modifier() {
     val morphMap = IntIntMap()
 
     override fun disableAssist(): Boolean = true
-    override fun chance() = 0.1f
+    override fun chance() = 0.08f
 
     override fun start() {
         Vars.state.rules.deconstructRefundMultiplier = 1f
@@ -38,11 +39,13 @@ class Crazy: Modifier() {
         val block = tile.block();
         if (block == null) return;
 
-        if (block.isFloor) {
-            tile.setFloor(block.asFloor())
+        if (block.isOverlay) {
+            tile.setOverlayNet(block)
+            tile.setNet(Blocks.air)
         }
-        else if (block.isOverlay) {
-            tile.setOverlay(block)
+        else if (block.isFloor) {
+            tile.setFloorNet(block.asFloor())
+            tile.setNet(Blocks.air)
         }
     }
 }
