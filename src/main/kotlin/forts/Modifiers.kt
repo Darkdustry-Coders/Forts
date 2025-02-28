@@ -12,6 +12,7 @@ import arc.math.Mathf
 import arc.util.Log
 import arc.util.Timer
 import buj.tl.Tl
+import buj.tl.Tlu
 import mindustry.Vars
 import mindustry.game.MapObjectives
 import mindustry.gen.Call
@@ -172,6 +173,6 @@ fun gameOver() {
     if (modifiers.isEmpty) return
 
     Tl.broadcast()
-        .put("modifiers", modifiers.map { it.javaClass.simpleName.lowercase() }.joinToString(","))
+        .apply { Tlu.list(this, modifiers.map { it.javaClass.simpleName.lowercase() }, "modifiers") }
         .done("{forts.notice.modifiers}")
 }

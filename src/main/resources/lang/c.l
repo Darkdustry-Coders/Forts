@@ -1,5 +1,5 @@
 [forts]
-notice.modifiers = [cyan]Enabled modifiers:
+notice.modifiers = [cyan]Enabled modifier{if {modifiers.len} != 1 then s}:
                  = {each {modifier} in {modifiers}
                  = ([red]- [yellow]{forts.modifiers.{modifier}.name}
                  = {forts.modifiers.{modifier}.desc})

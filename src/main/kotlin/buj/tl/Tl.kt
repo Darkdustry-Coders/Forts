@@ -1,11 +1,7 @@
-// TODO: Proper parser
-
 package buj.tl
 
-import arc.math.Mathf
 import arc.struct.ObjectMap
 import arc.struct.Seq
-import arc.util.Log
 import mindustry.gen.Groups
 import mindustry.gen.Player
 import java.io.IOException
@@ -93,7 +89,6 @@ private class LocaleFile {
             try {
                 val stream = loader.getResourceAsStream("lang/${locale}.l")
                 if (stream == null) {
-                    Log.warn("Couldn't find resource 'lang/${locale}.l'")
                     cache.put(locale, null)
                     return null
                 }
@@ -239,7 +234,6 @@ class Ls(val locale: String, val ctx: LCtx = LCtx()): L<Ls> {
 
     fun done(key: String): String {
         val script = Tl.parse(key)
-        Log.info(script.debug())
         return script.append(ctx, "", locale)
     }
 }
@@ -306,6 +300,128 @@ private class ScrEach(val key: String, val source: Script, val template: Script,
     override fun debug(): String = "Each($key in ${source.debug()} split ${separator.debug()} join ${join.debug()})"
 }
 
+private class ScrIf(val rhs: Script, val op: Op, val lhs: Script, val then: Script, val other: Script): Script {
+    enum class Op {
+        Equals,
+        EqualsIgnoreCase,
+        NotEquals,
+        NotEqualsIgnoreCase,
+        Contains,
+        ContainsIgnoreCase,
+        StartsWith,
+        EndsWith,
+        Greater,
+        Smaller,
+        GreaterOrEqual,
+        SmallerOrEqual,
+        Spans,
+
+        ;
+
+        fun debug(): String =
+            when (this) {
+                Equals -> "="
+                EqualsIgnoreCase -> "=="
+                NotEquals -> "!="
+                NotEqualsIgnoreCase -> "!=="
+                Contains -> "~="
+                ContainsIgnoreCase -> "~"
+                StartsWith -> "#="
+                EndsWith -> "=#"
+                Greater -> ">"
+                Smaller -> "<"
+                GreaterOrEqual -> ">="
+                SmallerOrEqual -> "<="
+                Spans -> "#~"
+            }
+
+        companion object {
+            fun fromString(op: String): Op =
+                when (op) {
+                    "=" -> Equals
+                    "==" -> EqualsIgnoreCase
+                    "!=" -> NotEquals
+                    "!==" -> NotEquals
+                    "~=" -> Contains
+                    "~" -> ContainsIgnoreCase
+                    "#=" -> StartsWith
+                    "=#" -> EndsWith
+                    ">" -> Greater
+                    "<" -> Smaller
+                    ">=" -> GreaterOrEqual
+                    "<=" -> SmallerOrEqual
+                    "#~" -> Spans
+                    else -> throw RuntimeException("invalid operator '${op}'")
+                }
+        }
+    }
+
+    override fun append(ctx: LCtx, source: String, lang: String): String {
+        val rhs = this.rhs.append(ctx, "", lang)
+        val lhs = this.lhs.append(ctx, "", lang)
+
+        return if (when (op) {
+                Op.Equals -> rhs == lhs
+                Op.EqualsIgnoreCase -> rhs.equals(lhs, true)
+                Op.NotEquals -> rhs != lhs
+                Op.NotEqualsIgnoreCase -> !rhs.equals(lhs, true)
+                Op.Contains -> rhs.contains(lhs)
+                Op.ContainsIgnoreCase -> rhs.contains(lhs, true)
+                Op.StartsWith -> rhs.startsWith(lhs)
+                Op.EndsWith -> rhs.endsWith(lhs)
+                Op.Greater -> {
+                    val rval = rhs.toFloatOrNull()
+                    val lval = lhs.toFloatOrNull()
+
+                    rval != null && lval != null && rval > lval
+                }
+                Op.Smaller -> {
+                    val rval = rhs.toFloatOrNull()
+                    val lval = lhs.toFloatOrNull()
+
+                    rval != null && lval != null && rval < lval
+                }
+                Op.GreaterOrEqual -> {
+                    val rval = rhs.toFloatOrNull()
+                    val lval = lhs.toFloatOrNull()
+
+                    rval != null && lval != null && rval >= lval
+                }
+                Op.SmallerOrEqual -> {
+                    val rval = rhs.toFloatOrNull()
+                    val lval = lhs.toFloatOrNull()
+
+                    rval != null && lval != null && rval <= lval
+                }
+                Op.Spans -> {
+                    if (lhs.isEmpty()) true
+                    else {
+                        var i = 0
+                        for (ch in rhs) {
+                            if (ch == lhs[i]) {
+                                i++
+                                if (i == lhs.length) break
+                            }
+                        }
+                        i == lhs.length
+                    }
+                }
+            }) then.append(ctx, source, lang)
+        else other.append(ctx, source, lang)
+    }
+    override fun debug(): String = "If(${rhs.debug()} ${op.debug()} ${lhs.debug()}, ${then.debug()}, ${other.debug()})"
+}
+
+private object ScrNone: Script {
+    override fun append(ctx: LCtx, source: String, lang: String): String = source
+    override fun debug(): String = "<empty>"
+}
+
+// General rules for parse* functions:
+//
+// 1. idx must point to the first character of the expression
+// 2. returned idx must be at the character after the expression
+
 private fun parseUnicode(script: String, idx: Array<Int>): Char {
     var num = 0
     if (idx[0] >= script.length || script[idx[0]] != '{') throw RuntimeException("invalid unicode escape")
@@ -323,8 +439,42 @@ private fun parseUnicode(script: String, idx: Array<Int>): Char {
     return num.toChar()
 }
 
+private fun parseExpr(script: String, idx: Array<Int>): Script {
+    var tempStr = ""
+    var depth = Seq<Char>()
+    var backspace = false
+    idx[0]--
+    while (++idx[0] < script.length) {
+        if (backspace) {
+            backspace = false
+            if (!"(){}\\".contains(script[idx[0]])) tempStr += '\\'
+            tempStr += script[idx[0]]
+            continue
+        }
+        when (script[idx[0]]) {
+            '\\' -> { backspace = true; continue }
+            '(' -> { depth.add(')'); if (depth.size == 1) continue }
+            ')' -> {
+                if (depth.isEmpty) break
+                if (depth.pop() != ')') throw RuntimeException("mismatched bracket. expected ')'")
+                if (depth.isEmpty) break
+            }
+            '{' -> depth.add('}')
+            '}' -> {
+                if (depth.isEmpty) break
+                if (depth.pop() != '}') throw RuntimeException("mismatched bracket. expected '}'")
+            }
+        }
+        if (!depth.isEmpty || !script[idx[0]].isWhitespace() && !"<>=#~!".contains(script[idx[0]])) tempStr += script[idx[0]]
+        else break
+    }
+    if (!depth.isEmpty) throw RuntimeException("unenclosed expression")
+    return Tl.parse(tempStr)
+}
+
 private fun parseEach(script: String, idx: Array<Int>): Script {
-    // TODO: {each {name} in {key} (<template>) split (<sep>) join (<sep>) [...if (<cond>)]}
+    // TODO: {each {name} in {key} <template> split <sep> join <sep> [..if <cond>]}
+    // TODO: move to parseExpr
 
     if (!script.startsWith("{each", idx[0])) throw RuntimeException("not an each expression")
     idx[0] += "{each".length - 1
@@ -456,10 +606,57 @@ private fun parseEach(script: String, idx: Array<Int>): Script {
     return ScrEach(key, source, template, split, join)
 }
 
+private fun parseIf(script: String, idx: Array<Int>, afterOpening: Boolean = false): Script {
+    if (!script.substring(idx[0]).contains(Regex("^\\{if[ ({]"))
+        && !(afterOpening && script.substring(idx[0]).contains(Regex("^if[ ({]")))) throw RuntimeException("not an if statement");
+    idx[0] += if (afterOpening) "if".length else "{if".length
+
+    do idx[0]++ while (idx[0] < script.length && script[idx[0]].isWhitespace())
+    val rhs = parseExpr(script, idx)
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed if expression")
+
+    while (idx[0] < script.length && script[idx[0]].isWhitespace()) idx[0]++
+    if (idx[0]-- >= script.length) throw RuntimeException("unenclosed if expression")
+    var tempStr = ""
+    while (++idx[0] < script.length) {
+        if ("<>=#~!".contains(script[idx[0]])) tempStr += script[idx[0]]
+        else break
+    }
+    val op = ScrIf.Op.fromString(tempStr)
+
+    while (idx[0] < script.length && script[idx[0]].isWhitespace()) idx[0]++
+    val lhs = parseExpr(script, idx)
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed if expression")
+
+    while (idx[0] < script.length && script[idx[0]].isWhitespace()) idx[0]++
+    if (!script.substring(idx[0]).contains(Regex("^then[ ({]"))) throw RuntimeException("missing 'then' expression")
+    idx[0] += "then".length
+    while (idx[0] < script.length && script[idx[0]].isWhitespace()) idx[0]++
+    val then = parseExpr(script, idx)
+    if (idx[0] >= script.length) throw RuntimeException("unenclosed if expression")
+
+    var other: Script = ScrNone
+    while (idx[0] < script.length && script[idx[0]].isWhitespace()) idx[0]++
+    if (script.substring(idx[0]).contains(Regex("^else[ ({]"))) {
+        idx[0] += "else".length
+        while (idx[0] < script.length && script[idx[0]].isWhitespace()) idx[0]++
+        other = if (script.substring(idx[0]).contains(Regex("^if[ ({]"))) parseIf(script, idx, true)
+                else parseExpr(script, idx)
+    }
+
+    if (!afterOpening) {
+        while (idx[0] < script.length && script[idx[0]].isWhitespace()) idx[0]++
+        if (idx[0] >= script.length || script[idx[0]++] != '}') throw RuntimeException("unenclosed if expression")
+    }
+
+    return ScrIf(rhs, op, lhs, then, other)
+}
+
 private fun parseKey(script: String, idx: Array<Int>): Script {
-    // TODO: {if (<cond>) () ..else if (<cond>) () ..else ()}
+    // TODO: {<key> [..with {<key>} = (<value>)]}
 
     if (script.startsWith("{each{", idx[0]) || script.startsWith("{each ", idx[0])) return parseEach(script, idx);
+    if (script.substring(idx[0]).contains(Regex("^\\{if[ ({]"))) return parseIf(script, idx);
 
     if (idx[0] >= script.length || script[idx[0]++] != '{') throw RuntimeException("invalid key sequence")
     var text = ""
@@ -477,9 +674,8 @@ private fun parseKey(script: String, idx: Array<Int>): Script {
             '\\' -> { backslash = true; continue }
         }
         if (depth > 0) text += script[idx[0]]
-        else break
+        else { idx[0]++; break }
     } while (++idx[0] < script.length)
-    Log.info("parseKey text=$text")
     return ScrKey(Tl.parse(text))
 }
 
@@ -496,7 +692,7 @@ private fun parseRoot(script: String, idx: Array<Int>): Script {
             backslash = false
 
             text += when (ch) {
-                'u' -> parseUnicode(script, idx)
+                'u' -> { val o = parseUnicode(script, idx); idx[0]--; o }
                 'n' -> '\n'
                 else -> ch
             }
@@ -510,19 +706,15 @@ private fun parseRoot(script: String, idx: Array<Int>): Script {
                 if (!text.isEmpty()) combo.add(ScrText(text))
                 text = ""
                 combo.add(parseKey(script, idx))
+                idx[0]--
             }
-            '}' -> {
-                Log.err("FATAL!")
-                Log.err("text=$text")
-                Log.err("idx=${idx[0]}")
-                Log.err("script=$script")
-                throw RuntimeException("unexpected '}'")
-            }
+            '}' -> throw RuntimeException("unexpected '}'")
             else -> text += ch
         }
     }
     if (!text.isEmpty()) combo.add(ScrText(text))
 
+    if (combo.isEmpty) return ScrNone
     if (combo.size == 1) return combo[0]
     return ScrCombo(combo)
 }
@@ -540,7 +732,14 @@ object Tl {
     fun parse(script: String): Script {
         val idx = arrayOf(0)
         val script = parseRoot(script, idx)
-        Log.info("parse ${script.debug()}")
         return script
+    }
+}
+
+object Tlu {
+    fun <R, T: L<R>> list(l: T, list: Iterable<String>, key: String, sep: String = ","): T {
+        l.put(key, list.joinToString(sep))
+        l.put("${key}.len", list.count().toString())
+        return l
     }
 }
