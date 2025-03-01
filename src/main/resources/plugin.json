@@ -3,5 +3,5 @@
     "author": "buj",
     "main": "forts.Main",
     "description": "The Forts server plugin",
-    "version": 1.7
+    "version": 1.8
 }
