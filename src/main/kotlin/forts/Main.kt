@@ -180,7 +180,8 @@ class Main: Plugin() {
         (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.plastanium).splashDamage = 95f
         (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.surgeAlloy).splashDamage = 125f
 
-        (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).buildingDamageMultiplier = 0.005f
+        // 0.04 the bullshit infinity penalty
+        (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).buildingDamageMultiplier = 0.005f * 0.04f / 16
         (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).damage = 200f
         (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).splashDamage = 800f
         (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).splashDamagePierce = true
