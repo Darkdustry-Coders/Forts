@@ -180,7 +180,7 @@ class Main: Plugin() {
         (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.plastanium).splashDamage = 95f
         (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.surgeAlloy).splashDamage = 125f
 
-        (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).buildingDamageMultiplier = 0.05f
+        (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).buildingDamageMultiplier = 0.02f
         (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).damage = 200f
         (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).splashDamage = 800f
         (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium).splashDamagePierce = true
