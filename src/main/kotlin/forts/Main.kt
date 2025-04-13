@@ -157,7 +157,7 @@ class Main: Plugin() {
                         Team.derelict,
                         it.tile.getX(), it.tile.getY(),
                         40.0f, 500.0f,
-                        true, true, true
+                        true, true, true, true
                     )
                     Call.effect(
                         Fx.spawn,

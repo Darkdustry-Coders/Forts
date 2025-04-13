@@ -19,7 +19,7 @@ class Unstable: Modifier() {
                 it.tile.block().health.toFloat() *
                         Vars.state.rules.blockHealthMultiplier *
                         Vars.state.rules.teams.get(it.tile.team()).blockHealthMultiplier / 2f,
-                true, true, false
+                true, true, false, true
             )
         }
         registerEvent<EventType.UnitDestroyEvent> {
@@ -30,7 +30,7 @@ class Unstable: Modifier() {
                 it.unit.type.health.toFloat() *
                         Vars.state.rules.blockHealthMultiplier *
                         Vars.state.rules.teams.get(it.unit.team()).blockHealthMultiplier / 2f,
-                true, true, false
+                true, true, false, true
             )
         }
     }

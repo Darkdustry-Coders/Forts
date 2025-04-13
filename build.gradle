@@ -29,8 +29,8 @@ allprojects {
 }
 
 dependencies {
-    compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
-    compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+    compileOnly "com.github.Anuken.Arc:arc-core:v146"
+    compileOnly files("$rootDir/run/server.jar")
     testImplementation 'org.jetbrains.kotlin:kotlin-test'
     annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 }
@@ -55,14 +55,10 @@ tasks.register("runServer") {
 
     doLast {
         def path = rootProject.rootDir.toPath().resolve("run")
-        Files.createDirectories(path.resolve("config/mods"))
-        Files.createDirectories(path.resolve("config/maps"))
 
-        if (!Files.exists(path.resolve("server.jar"))) {
-            println "Downloading Mindustry server..."
-            Files.copy(
-                    new URL("https://github.com/Anuken/Mindustry/releases/download/v146/server-release.jar").openStream(),
-                    path.resolve("server.jar"))
+        if (!Files.exists(path.resolve("config"))) {
+            Files.createDirectories(path.resolve("config/mods"))
+            Files.createDirectories(path.resolve("config/maps"))
             Files.copy(
                     rootDir.toPath().resolve("assets/testmap.msav"),
                     path.resolve("config/maps/Forts_v1_5.msav"))
@@ -80,13 +76,6 @@ tasks.register("runServer") {
             classpath = files(path.resolve("server.jar"))
             workingDir = path.toFile()
             standardInput = System.in
-
-            debugOptions {
-                enabled = true
-                port = 7857
-                server = true
-                suspend = false
-            }
         }
     }
 }

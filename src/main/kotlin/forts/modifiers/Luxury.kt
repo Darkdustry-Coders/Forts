@@ -14,10 +14,9 @@ class Luxury: Modifier() {
         Core.app.post {
             Team.all.forEach {
                 if (!it.active()) return@forEach
-                val core = it.core()
-                if (core == null) return@forEach
-                core.items().each { item, count ->
-                    core.items().add(item, count)
+                val core = it.core() ?: return@forEach
+                core.items.each { item, count ->
+                    core.items.add(item, count)
                 }
             }
         }
