@@ -5,7 +5,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
 plugins {
-    id 'org.jetbrains.kotlin.jvm' version '2.0.0'
+    alias(libs.plugins.kotlin.jvm)
 }
 
 def json = new JsonSlurper()
@@ -14,26 +14,29 @@ def mod = json.parse("$rootDir/src/main/resources/plugin.json" as File)
 group = "net.buj"
 version = "${mod['version']}"
 
+def workspacePath = gradle.ext.workspacePath
+
 compileJava.options.encoding = "UTF-8"
 
 repositories {
     mavenCentral()
     maven { url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
-    maven { url 'https://jitpack.io' }
+    maven { url "https://jitpack.io" }
+    maven { url "$workspacePath/.cache/maven" }
 }
 
 allprojects {
     tasks.withType(JavaCompile).configureEach {
-        targetCompatibility = JavaVersion.VERSION_1_8
-        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_17
     }
 }
 
 dependencies {
-    compileOnly "com.github.Anuken.Arc:arc-core:$mindustryVersion"
-    compileOnly "com.github.Anuken.Mindustry:core:$mindustryVersion"
+    compileOnly libs.bundles.mindustry
+    compileOnly 'mindurka:CorePlugin:0.1'
+    testImplementation libs.bundles.mindustry
     testImplementation 'org.jetbrains.kotlin:kotlin-test'
-    annotationProcessor "com.github.Anuken:jabel:$jabelVersion"
 }
 
 jar {
@@ -48,58 +51,56 @@ test {
     useJUnitPlatform()
 }
 kotlin {
-    jvmToolchain(8)
+    jvmToolchain(17)
 }
 
 tasks.named("build") {
-    if (System.env["MINDURKA_WORKSPACE"] != null) {
-        def jarPath = Paths.get("${jar.archivePath}")
-        doLast {
-            Files.copy(
-                jarPath,
-                Paths.get(System.env["MINDURKA_WORKSPACE"]).resolve(".bin/Forts.jar"),
-                StandardCopyOption.REPLACE_EXISTING)
-        }
-    }
-}
-
-tasks.register("runServer") {
-    dependsOn build
-
+    def jarPath = Paths.get("${jar.archivePath}")
     doLast {
-        def path = rootProject.rootDir.toPath().resolve("run")
-        Files.createDirectories(path.resolve("config/mods"))
-        Files.createDirectories(path.resolve("config/maps"))
-
-        if (!Files.exists(path.resolve("server.jar"))) {
-            println "Downloading Mindustry server..."
-            Files.copy(
-                    new URL("https://github.com/Anuken/Mindustry/releases/download/v146/server-release.jar").openStream(),
-                    path.resolve("server.jar"))
-            Files.copy(
-                    rootDir.toPath().resolve("assets/testmap.msav"),
-                    path.resolve("config/maps/Forts_v1_5.msav"))
-            Files.copy(
-                    rootDir.toPath().resolve("assets/settings.bin"),
-                    path.resolve("config/settings.bin"))
-        }
-
         Files.copy(
-                jar.archiveFile.get().asFile.toPath(),
-                path.resolve("config/mods/Debug.jar"),
-                StandardCopyOption.REPLACE_EXISTING)
-
-        javaexec {
-            classpath = files(path.resolve("server.jar"))
-            workingDir = path.toFile()
-            standardInput = System.in
-
-            debugOptions {
-                enabled = true
-                port = 7857
-                server = true
-                suspend = false
-            }
-        }
+            jarPath,
+            workspacePath.resolve(".bin/Forts.jar"),
+            StandardCopyOption.REPLACE_EXISTING)
     }
 }
+
+// tasks.register("runServer") {
+//     dependsOn build
+// 
+//     doLast {
+//         def path = rootProject.rootDir.toPath().resolve("run")
+//         Files.createDirectories(path.resolve("config/mods"))
+//         Files.createDirectories(path.resolve("config/maps"))
+// 
+//         if (!Files.exists(path.resolve("server.jar"))) {
+//             println "Downloading Mindustry server..."
+//             Files.copy(
+//                     new URL("https://github.com/Anuken/Mindustry/releases/download/v146/server-release.jar").openStream(),
+//                     path.resolve("server.jar"))
+//             Files.copy(
+//                     rootDir.toPath().resolve("assets/testmap.msav"),
+//                     path.resolve("config/maps/Forts_v1_5.msav"))
+//             Files.copy(
+//                     rootDir.toPath().resolve("assets/settings.bin"),
+//                     path.resolve("config/settings.bin"))
+//         }
+// 
+//         Files.copy(
+//                 jar.archiveFile.get().asFile.toPath(),
+//                 path.resolve("config/mods/Debug.jar"),
+//                 StandardCopyOption.REPLACE_EXISTING)
+// 
+//         javaexec {
+//             classpath = files(path.resolve("server.jar"))
+//             workingDir = path.toFile()
+//             standardInput = System.in
+// 
+//             debugOptions {
+//                 enabled = true
+//                 port = 7857
+//                 server = true
+//                 suspend = false
+//             }
+//         }
+//     }
+// }

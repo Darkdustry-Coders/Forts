@@ -1,6 +1,5 @@
 package forts
 
-import arc.Events
 import arc.graphics.Color
 import arc.struct.Seq
 import arc.util.CommandHandler
@@ -24,6 +23,7 @@ import kotlin.math.roundToInt
 import mindustry.content.UnitTypes
 import mindustry.game.EventType
 import mindustry.world.blocks.defense.turrets.ItemTurret
+import mindurka.api.on
 
 fun surroundingTiles(tile: Tile, block: Block, collect: Seq<Tile>): Seq<Tile> {
     collect.clear()
@@ -101,7 +101,7 @@ class Main: Plugin() {
         initModifiers()
         Tl.init(javaClass.classLoader)
 
-        Events.on(PlayEvent::class.java) {
+        on<PlayEvent> {
             game++
 
             Vars.state.rules.revealedBlocks.addAll(Blocks.impactReactor, Blocks.carbideWall, Blocks.carbideWallLarge, Blocks.basicAssemblerModule)
@@ -109,7 +109,7 @@ class Main: Plugin() {
             Vars.state.rules.tags.put("mindurkaGamemode", "forts")
         }
 
-        Events.on(BlockBuildEndEvent::class.java) {
+        on<BlockBuildEndEvent> {
             if (it.breaking) return@on
 
             val rot = if (it.tile.block().hasBuilding()) { it.tile.build.rotation } else { 0 }
@@ -168,7 +168,7 @@ class Main: Plugin() {
             }, 0.1f)
         }
 
-        Events.on(EventType.GameOverEvent::class.java) { gameOver() }
+        on<EventType.GameOverEvent> { gameOver() }
 
         CustomDestructor.load()
 
