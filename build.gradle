@@ -32,9 +32,13 @@ allprojects {
     }
 }
 
+// configurations.configureEach {
+//     resolutionStrategy.cacheDynamicVersionsFor 1, 'seconds'
+// }
+
 dependencies {
     compileOnly libs.bundles.mindustry
-    compileOnly 'mindurka:CorePlugin:0.1'
+    compileOnly 'mindurka:CorePlugin:latest-SNAPSHOT'
     testImplementation libs.bundles.mindustry
     testImplementation 'org.jetbrains.kotlin:kotlin-test'
 }
