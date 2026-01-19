@@ -2,6 +2,7 @@ package forts.modifiers
 
 import arc.math.Mathf
 import forts.Modifier
+import mindurka.api.interval
 import mindustry.Vars
 import mindustry.gen.Groups
 import mindustry.world.blocks.storage.CoreBlock
@@ -12,7 +13,7 @@ class Decay: Modifier() {
     override fun chance() = 0.03f
 
     override fun start() {
-        runEvery(1f) {
+        interval(1f, lifetime = lifetime) {
             amount += 0.02f
             repeat(amount.toInt()) {
                 val len = Groups.build.size()

@@ -7,6 +7,12 @@ import mindustry.world.blocks.ConstructBlock
 import mindustry.Vars
 import arc.struct.IntIntMap
 import arc.math.Mathf
+import arc.util.Log
+import mindurka.api.BuildEvent
+import mindurka.api.Cancel
+import mindurka.api.Consts
+import mindurka.api.Priority
+import mindurka.api.on
 import mindustry.content.Blocks
 
 class Crazy: Modifier() {
@@ -20,7 +26,7 @@ class Crazy: Modifier() {
         val free = Vars.content.blocks()
             .select { it !is ConstructBlock }
         Vars.content.blocks()
-            .each<Block>({ it !is ConstructBlock }) {
+            .each<Block>({ it !is ConstructBlock && it !in Consts.legacyBlocks }) {
                 while (true) {
                     val idx = Mathf.random(0, free.size - 1)
                     val obj = free[idx]
@@ -30,22 +36,23 @@ class Crazy: Modifier() {
                     break
                 }
             }
-    }
-    override fun mapBlock(tile: Tile, block: Block): Block? {
-        return Vars.content.block(morphMap.get(block.id.toInt()))
-    }
 
-    override fun blockPlaced(tile: Tile) {
-        val block = tile.block();
-        if (block == null) return;
-
-        if (block.isOverlay) {
-            tile.setOverlayNet(block)
-            tile.setNet(Blocks.air)
+        on<BuildEvent>(lifetime = lifetime, priority = Priority.Low) {
         }
-        else if (block.isFloor) {
-            tile.setFloorNet(block.asFloor())
-            tile.setNet(Blocks.air)
+    }
+
+    override fun onBuild(event: BuildEvent) {
+        val block = Vars.content.block(morphMap.get(event.block().id.toInt())) ?: return;
+        if (block.isOverlay) {
+            event.replaceAir()
+            event.replaceOverlay(block)
+            event.tile.setOverlayNet(block)
+            event.tile.setNet(Blocks.air)
+        } else if (block.isFloor) {
+            event.replaceAir()
+            event.replaceFloor(block.asFloor())
+        } else {
+            event.replace(block, event.team(), event.rotation())
         }
     }
 }

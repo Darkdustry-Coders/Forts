@@ -1,6 +1,9 @@
 package forts.modifiers
 
 import forts.Modifier
+import mindurka.api.Cancel
+import mindurka.api.interval
+import mindurka.api.on
 import mindustry.Vars
 import mindustry.game.EventType
 import mindustry.gen.Groups
@@ -13,21 +16,21 @@ class Glass: Modifier() {
         Vars.state.rules.unitDamageMultiplier *= 4f;
         Vars.state.rules.unitCrashDamageMultiplier *= 4f;
 
-        runEvery(0.2f) {
+        interval(0.2f, lifetime = lifetime) {
             Groups.unit.each {
                 if (it.isPlayer && !(it is PayloadUnit && !it.payloads.isEmpty)) return@each
                 if (it.health() > 10f) it.health(10f)
             }
         }
 
-        registerEvent<EventType.UnitSpawnEvent> {
-            if (it.unit.isPlayer && !(it.unit is PayloadUnit && !(it.unit as PayloadUnit).payloads.isEmpty)) return@registerEvent
+        on<EventType.UnitSpawnEvent>(lifetime = lifetime) {
+            if (it.unit.isPlayer && !(it.unit is PayloadUnit && !(it.unit as PayloadUnit).payloads.isEmpty)) return@on
             it.unit.health(10f)
         }
-    }
 
-    override fun destroy() {
-        Vars.state.rules.unitDamageMultiplier /= 4f;
-        Vars.state.rules.unitCrashDamageMultiplier /= 4f;
+        lifetime.bind(Cancel {
+            Vars.state.rules.unitDamageMultiplier /= 4f;
+            Vars.state.rules.unitCrashDamageMultiplier /= 4f;
+        })
     }
 }

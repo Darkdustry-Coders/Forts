@@ -1,46 +1,39 @@
 package forts.modifiers
 
+import arc.util.Time
 import forts.Modifier
-import mindustry.world.Tile
-import mindustry.world.Block
+import mindurka.api.interval
 import mindustry.Vars
 import mindustry.game.Team
-import arc.struct.IntIntMap
-import arc.math.Mathf
-import arc.util.Timer
+import kotlin.math.min
 
 class ResourceFlood: Modifier() {
-    var untilFast = 100
 
     override fun chance() = 0.2f
 
     override fun start() {
-        var timer: Array<Timer.Task> = arrayOf(Timer.schedule({}, 0f))
-        timer[0] = runEvery(6f) {
+        var lastTime = Time.millis()
+        var untilFast = 200f
+        var inc = 0f
+
+        interval(0.01f, lifetime = lifetime) {
+            val delta = (Time.millis() - lastTime).toFloat() / 1000f
+            lastTime = Time.millis()
+            inc += delta * 100 / (if (untilFast <= 0f) 2f else 6f)
+            val intInc = inc.toInt()
+            inc %= 1
             Team.all.forEach {
+                val cap = if (untilFast <= 0) 2000 else 1000
                 val core = it.core() ?: return@forEach
-                val items = core.items()
+                val items = core.items
                 Vars.content.items().each { item ->
                     val count = items.get(item)
-                    if (count > 0 && count < 1000)
-                        items.add(item, 100)
+                    if (count in 1..cap)
+                        items.set(item, min(cap, items.get(item) + intInc))
                 }
             }
-            untilFast--
-            if (untilFast == 0) {
-                cancel(timer[0])
-                timer[0] = runEvery(2f) {
-                    Team.all.forEach {
-                        val core = it.core() ?: return@forEach
-                        val items = core.items()
-                        Vars.content.items().each { item ->
-                            val count = items.get(item)
-                            if (count > 0 && count < 1000)
-                                items.add(item, 100)
-                        }
-                    }
-                }
-            }
+
+            untilFast -= delta
         }
     }
 }

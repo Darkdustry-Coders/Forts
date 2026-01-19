@@ -1,0 +1,323 @@
+package forts
+
+import arc.graphics.Color
+import arc.struct.IntMap
+import arc.util.Log
+import arc.util.Strings
+import mindurka.api.Lifetime
+import mindurka.api.RulesContext
+import mindurka.api.timer
+import mindurka.util.FormatException
+import mindurka.util.ModifyWorld
+import mindurka.util.Schematic
+import mindustry.Vars
+import mindustry.content.Blocks
+import mindustry.content.Fx
+import mindustry.game.Team
+import mindustry.gen.Call
+import mindustry.gen.Groups
+import kotlin.run
+
+class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
+    companion object {
+        val PREFIX = FortsRules.PLOT_PREFIX
+        val SIZE = "$PREFIX.size"
+        val WIDTH = "$PREFIX.width"
+        val HEIGHT = "$PREFIX.height"
+        val WALLS_SIZE = "$PREFIX.walls_size"
+        val SHIFT_X = "$PREFIX.shift_x"
+        val SHIFT_Y = "$PREFIX.shift_y"
+        val STATES = "$PREFIX.states"
+
+        const val MAX_SIZE = 16
+
+        val SCHEME_OPTIONS = Schematic.Options().skipAir().skipEmpty()
+        val SCHEME_CREATE_OPTIONS = Schematic.Options().skipBuildings()
+
+        private val SCHEMATIC_HEAD = "$PREFIX.schematic."
+        private val SCHEMATIC_HEAD_END = SCHEMATIC_HEAD.length
+        fun keyIsSchematic(key: String): Boolean {
+            if (!key.startsWith(SCHEMATIC_HEAD)) return false
+            // TODO: Port to MindurkaCompat. MindurkaCompat implementation sucks.
+            return when (key.length - SCHEMATIC_HEAD.length) {
+                1 -> ('1'..'9').contains(key[SCHEMATIC_HEAD_END])
+                2 -> ('1'..'9').contains(key[SCHEMATIC_HEAD_END]) && ('0'..'9').contains(key[SCHEMATIC_HEAD_END + 1])
+                3 -> ('1'..'2').contains(key[SCHEMATIC_HEAD_END]) && (
+                    ('0'..'4').contains(key[SCHEMATIC_HEAD_END + 1]) && ('0'..'9').contains(key[SCHEMATIC_HEAD_END + 2]) ||
+                    key[SCHEMATIC_HEAD_END + 1] == '5' && ('0'..'4').contains(key[SCHEMATIC_HEAD_END + 2])
+                )
+                else -> false
+            }
+        }
+        fun keySchematicTeam(key: String): Team? {
+            if (!keyIsSchematic(key)) return null
+            return Team.all[Strings.parseInt(key, 10, 0, SCHEMATIC_HEAD_END, key.length)]
+        }
+    }
+
+    enum class Shape {
+        Square,
+        Rect,
+
+        ;
+
+        fun width(): String = if (this == Square) SIZE else WIDTH
+        fun height(): String = if (this == Square) SIZE else HEIGHT
+    }
+
+    val width = rc.r(shape.width(), 6).let { if (it !in 1..MAX_SIZE) 6 else it }
+    val height = rc.r(shape.height(), 6).let { if (it !in 1..MAX_SIZE) 6 else it }
+    val wallsSize = rc.r(WALLS_SIZE, 1).let { if (it !in 1..MAX_SIZE) 1 else it }
+    private val jX = width + wallsSize
+    private val jY = height + wallsSize
+    val startX = rc.r(SHIFT_X, 0).let { if (it !in 1..MAX_SIZE) 1 else it } % jX
+    val startY = rc.r(SHIFT_Y, 0).let { if (it !in 1..MAX_SIZE) 1 else it } % jY
+    val plotsX = (rc.mapWidth - startX + wallsSize) / jX
+    val plotsY = (rc.mapHeight - startY + wallsSize) / jY
+    val teams: ByteArray = ByteArray(plotsX * plotsY)
+    fun teams(plotX: Int, plotY: Int): Team = Team.all[teams[plotX + plotY * plotsX].toInt()]
+    fun teams(plotX: Int, plotY: Int, team: Team) { teams[plotX + plotY * plotsX] = team.id.toByte() }
+    val states: ByteArray = ByteArray(plotsX * plotsY)
+    fun states(plotX: Int, plotY: Int, state: PlotStateTag) { states[plotX + plotY * plotsX] = state.ordinal.toByte() }
+    fun states(plotX: Int, plotY: Int): PlotStateTag = PlotStateTag.entries[states[plotX + plotY * plotsX].toInt()]
+    val plotSchematics = IntMap<Schematic>()
+
+    private val centerParts = IntMap<Schematic>()
+    private val horizontalWalls = IntMap<Schematic>()
+    private val verticalWalls = IntMap<Schematic>()
+    private val intersectionParts = IntMap<Schematic>()
+
+    // Kotlin moment
+    init { run {
+        for (key in rc.rules.tags.keys()) {
+            val team = keySchematicTeam(key) ?: continue
+            try {
+                val scheme = Schematic.of(rc.rules.tags.get(key))
+                if (scheme.width != width + wallsSize * 2 || scheme.height != height + wallsSize * 2) {
+                    continue
+                }
+                plotSchematics.put(team.id, scheme)
+            } catch (ignored: FormatException) {
+                plotSchematics.clear()
+                return@run
+            }
+        }
+
+        val statesS = rc.r(STATES, "")
+        if (statesS.length != states.size * 3) return@run
+
+        var chars = statesS.chars().iterator()
+        for (ignored /* IDEA shut up */ in 0..<plotsX * plotsY) {
+            var ch = chars.nextInt()
+            if (ch < 'a'.code) return@run
+            if (ch - 'a'.code >= PlotStateTag.entries.size) return@run
+
+            ch = chars.nextInt()
+            if (ch !in '0'.code..'9'.code && ch !in 'a'.code..'f'.code) return@run
+            ch = chars.nextInt()
+            if (ch !in '0'.code..'9'.code && ch !in 'a'.code..'f'.code) return@run
+        }
+        chars = statesS.chars().iterator()
+        for (cursor in 0..<plotsX * plotsY) {
+            states[cursor] = (chars.nextInt() - 'a'.code).toByte()
+
+            val a = chars.nextInt()
+            val b = chars.nextInt()
+
+            teams[cursor] = ((if (a >= 'a'.code) a + 10 - 'a'.code else a - '0'.code) * 16
+                + (if (b >= 'a'.code) b + 10 - 'a'.code else b - '0'.code)).toByte()
+        }
+
+        for (x in 0..<plotsX) for (y in 0..<plotsY) {
+            if (!states(x, y).placed()) continue
+            val team = teams(x, y)
+            val schematic = plotSchematics[team.id] ?: continue
+            actualPlacePlot(x, y, team, schematic)
+        }
+    } }
+
+    fun actualPlacePlot(plotX: Int, plotY: Int, team: Team, schematic: Schematic) {
+        run {
+            val x = startX + plotX * jX
+            val y = startY + plotY * jY
+            val i = plotX + plotY * plotsX
+            if (!centerParts.containsKey(i)) {
+                centerParts.put(i, Schematic.of(Vars.world.tiles, x, y, width, height, SCHEME_CREATE_OPTIONS))
+                schematic.paste(wallsSize, wallsSize, width, height, Vars.world.tiles, x, y, SCHEME_OPTIONS)
+            }
+        }
+
+        for (dx in 0..1) for (dy in 0..1) {
+            val x = startX + (plotX + dx) * jX - wallsSize
+            val y = startY + (plotY + dy) * jY - wallsSize
+            val i = (plotX + dx) + (plotY + dy) * (plotsX + 1)
+            if (!intersectionParts.containsKey(i)) {
+                intersectionParts.put(i, Schematic.of(Vars.world.tiles, x, y, wallsSize, wallsSize, SCHEME_CREATE_OPTIONS))
+                schematic.paste(dx * jX, dy * jY, wallsSize, wallsSize, Vars.world.tiles, x, y, SCHEME_OPTIONS)
+            }
+        }
+
+        for (d in 0..1) {
+            run {
+                val x = startX + (plotX + d) * jX - wallsSize
+                val y = startY + plotY * jY
+                val i = (plotX + d) + plotY * (plotsX + 1)
+
+                if (!horizontalWalls.containsKey(i)) {
+                    horizontalWalls.put(i, Schematic.of(Vars.world.tiles, x, y, wallsSize, height))
+                    schematic.paste(jX * d, wallsSize, wallsSize, height, Vars.world.tiles, x, y)
+                }
+            }
+            run {
+                val x = startX + plotX * jX
+                val y = startY + (plotY + d) * jY - wallsSize
+                val i = plotX + (plotY + d) * plotsX
+
+                if (!verticalWalls.containsKey(i)) {
+                    verticalWalls.put(i, Schematic.of(Vars.world.tiles, x, y, width, wallsSize))
+                    schematic.paste(wallsSize, jY * d, width, wallsSize, Vars.world.tiles, x, y)
+                }
+            }
+        }
+    }
+
+    private fun _placeExpansionBlock(x: Int, y: Int, team: Team, delete: Runnable): Boolean {
+        val scheme = plotSchematics[team.id] ?: return false
+
+        val x = if (x < startX) startX else if (x > startX + jX * plotsX) startX + jX * plotsX else x
+        val y = if (y < startY) startY else if (y > startY + jY * plotsY) startY + jY * plotsY else y
+
+        for (dx in -1..1) for (dy in -1..1) {
+            val plotX = (x - startX) / jX + dx
+            val plotY = (y - startY) / jY + dy
+
+            if (dx == 0 && dy == 0) {
+                if (!states(plotX, plotY).placeable()) {
+                    Log.info("Plot already there ig")
+                    return false
+                }
+            } else if (states(plotX, plotY).placed() && teams(plotX, plotY) != team) {
+                Log.info("Enemy plot on $plotX, $plotY")
+                return false
+            }
+        }
+
+        delete.run()
+        actualPlacePlot((x - startX) / jX, (y - startY) / jY, team, scheme)
+        val plotX = (x - startX) / jX
+        val plotY = (y - startY) / jY
+        teams(plotX, plotY, team)
+        states(plotX, plotY, PlotStateTag.Placed)
+
+        for (dx in 0..<jX + wallsSize) for (dy in 0..<jY + wallsSize) {
+            val x = plotX * jX + dx + startX - wallsSize
+            val y = plotY * jY + dy + startY - wallsSize
+            val tile = Vars.world.tile(x, y) ?: continue
+
+            if (tile.block() != Blocks.air) continue
+            tile.setNet(Blocks.scrapWall, team, 0)
+        }
+
+        return true
+    }
+    override fun placeExpansionBlock(x: Int, y: Int, team: Team, delete: Runnable): Boolean {
+        if (_placeExpansionBlock(x, y, team, delete)) return true
+
+        val _x = if (x < startX) startX else if (x > startX + jX * plotsX) startX + jX * plotsX else x
+        val _y = if (y < startY) startY else if (y > startY + jY * plotsY) startY + jY * plotsY else y
+        val plotX = (_x - startX) / jX
+        val plotY = (_y - startY) / jY
+        val inPlotX = (_x - (startX + jX * plotX)).toFloat() / jX
+        val inPlotY = (_y - (startY + jY * plotY)).toFloat() / jY
+        Log.info("Plot ($_x, $_y), coords ($plotX, $plotY), float ($inPlotX, $inPlotY)")
+        val dx = if (inPlotX <= 0.33f) -1 else if (inPlotX <= 0.66f) 0 else 1
+        val dy = if (inPlotY <= 0.33f) -1 else if (inPlotY <= 0.66f) 0 else 1
+
+        return _placeExpansionBlock(x + dx * jX, y + dy * jY, team, delete)
+    }
+
+    private fun _handleBlockBreak(plotX: Int, plotY: Int) {
+        if (plotX < 0 || plotY < 0 || plotX >= plotsX || plotY >= plotsY) return
+        if (!states(plotX, plotY).breakable(teams(plotX, plotY))) return
+
+        var score = 0
+
+        for (dx in 0..<jX + wallsSize) for (dy in 0..<jY + wallsSize) {
+            val x = plotX * jX + startX - wallsSize + dx
+            val y = plotY * jY + startY - wallsSize + dy
+            val tile = Vars.world.tile(x, y) ?: continue
+            score += blockTileWorth(tile.block())
+            if (score >= 2) return
+        }
+
+        states(plotX, plotY, PlotStateTag.Enabled)
+
+        run {
+            val i = plotX + plotY * plotsX
+            if (centerParts.containsKey(i)) {
+                centerParts.remove(i).paste(Vars.world.tiles, plotX * jX + startX, plotY * jY + startY)
+            }
+        }
+
+        for (dx in 0..1) a@for (dy in 0..1) {
+            val i = (plotX + dx) + (plotY + dy) * (plotsX + 1)
+            for (ddx in -1..0) for (ddy in -1..0) {
+                if (plotX + dx + ddx >= plotsX) continue
+                if (plotY + dy + ddy >= plotsY) continue
+                if (plotX + dx + ddx < 0) continue
+                if (plotY + dy + ddy < 0) continue
+                if (states(plotX + dx + ddx, plotY + dy + ddy).visible()) continue@a
+            }
+            if (intersectionParts.containsKey(i)) {
+                intersectionParts.remove(i).paste(Vars.world.tiles, (plotX + dx) * jX + startX - wallsSize, (plotY + dy) * jY + startY - wallsSize)
+            }
+        }
+
+        for (d in 0..1) {
+            run {
+                for (dd in -1..0) {
+                    if (plotX + d + dd >= plotsX) continue
+                    if (plotX + d + dd < 0) continue
+                    if (states(plotX + d + dd, plotY).visible()) return@run
+                }
+                val i = (plotX + d) + plotY * (plotsX + 1)
+                if (horizontalWalls.containsKey(i)) {
+                    horizontalWalls.remove(i).paste(Vars.world.tiles, (plotX + d) * jX + startX - wallsSize, plotY * jY + startY)
+                }
+            }
+            run {
+                for (dd in -1..0) {
+                    if (plotY + d + dd >= plotsY) continue
+                    if (plotY + d + dd < 0) continue
+                    if (states(plotX, plotY + d + dd).visible()) return@run
+                }
+                val i = plotX + (plotY + d) * plotsX
+                if (verticalWalls.containsKey(i)) {
+                    verticalWalls.remove(i).paste(Vars.world.tiles, plotX * jX + startX, (plotY + d) * jY + startY - wallsSize)
+                }
+            }
+        }
+    }
+    override fun handleBlockBreak(x: Int, y: Int) {
+        if (x < startX - wallsSize || y < startY - wallsSize) return
+        if (x >= startX + plotsX * jX || y >= startY + plotsY * jY) return
+
+        val plotX = (x - startX) / jX
+        val plotY = (y - startY) / jY
+        val inPlotX = x - (plotX * jX + startX)
+        val inPlotY = y - (plotY * jY + startY)
+
+        _handleBlockBreak(plotX, plotY)
+        if (inPlotX >= width) _handleBlockBreak(plotX + 1, plotY)
+        if (inPlotY >= height) _handleBlockBreak(plotX, plotY + 1)
+        if (inPlotX >= width && inPlotY >= height) _handleBlockBreak(plotX + 1, plotY + 1)
+    }
+
+    override fun handleTeamDeath(team: Team) {
+        for (x in 0..<plotsX) for (y in 0..<plotsY) {
+            if (!states(x, y).placed()) continue
+            if (teams(x, y).cores() != team) continue
+            _handleBlockBreak(x, y)
+        }
+    }
+}

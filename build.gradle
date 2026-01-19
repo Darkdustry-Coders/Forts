@@ -6,6 +6,9 @@ import java.nio.file.StandardCopyOption
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
+
+    id 'org.jetbrains.kotlin.plugin.lombok' version '2.3.0'
+    id 'io.freefair.lombok' version '9.1.0'
 }
 
 def json = new JsonSlurper()
@@ -19,10 +22,10 @@ def workspacePath = gradle.ext.workspacePath
 compileJava.options.encoding = "UTF-8"
 
 repositories {
+    maven { url "$workspacePath/.cache/maven" }
     mavenCentral()
     maven { url "https://raw.githubusercontent.com/Zelaux/MindustryRepo/master/repository" }
     maven { url "https://jitpack.io" }
-    maven { url "$workspacePath/.cache/maven" }
 }
 
 allprojects {
@@ -38,7 +41,12 @@ allprojects {
 
 dependencies {
     compileOnly libs.bundles.mindustry
+    compileOnly libs.kotlin.coro
+
     compileOnly 'mindurka:CorePlugin:latest-SNAPSHOT'
+    compileOnly 'mindurka.coreplugin:annotations:latest-SNAPSHOT'
+    compileOnly 'mindurka.coreplugin:buildExtras:latest-SNAPSHOT'
+
     testImplementation libs.bundles.mindustry
     testImplementation 'org.jetbrains.kotlin:kotlin-test'
 }
