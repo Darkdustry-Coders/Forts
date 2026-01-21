@@ -1,0 +1,38 @@
+block.scrap-wall.alwaysReplace: true
+unit.poly.health: 90
+unit.flare.health: 150
+block.cyclone.ammoTypes: {
+    metaglass.splashDamage: 65
+    blast-compound.splashDamage: 100
+    plastanium.splashDamage: 95
+    surge-alloy.splashDamage: 125
+}
+block.titan.ammoTypes.thorium: {
+    buildingDamageMultiplier: 0.01
+    damage: 200
+    splashDamage: 800
+    splashDamagePierce: true
+    splashDamageRadius: 80
+}
+block.oxidation-chamber.canOverdrive: true
+block.thorium-reactor.health: 10
+block.neoplasia-reactor.health: 10
+block.overdrive-projector: {
+    consumes: {
+        remove: all
+        liquids: {
+            liquids: [{
+                liquid: gallium
+                amount: 0.2
+                booster: true
+                optional: true
+            }]
+        }
+    }
+    phaseRangeBoost: 0
+    speedBoostPhase: 0
+    speedBoost: 2
+    liquidCapacity: 10
+    requirements: [lead/150, titanium/300, thorium/600, silicon/400, plastanium/300, fissile-matter/100]
+    buildTime: 1800
+}

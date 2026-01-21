@@ -1,12 +1,17 @@
 package forts
 
 import arc.Core
+import arc.func.Prov
 import arc.graphics.Color
+import arc.math.Mathf
 import arc.struct.IntIntMap
+import arc.struct.IntSet
+import arc.struct.ObjectMap
 import arc.struct.Seq
 import arc.util.CommandHandler
 import arc.util.Log
 import arc.util.Time
+import arc.util.io.Streams
 import kotlinx.coroutines.future.await
 import mindurka.api.BuildEvent
 import mindurka.api.Cancel
@@ -14,33 +19,36 @@ import mindurka.api.Lifetime
 import mindurka.api.Priority
 import mindurka.api.SpecialSettingsLoad
 import mindurka.api.interval
-import mindustry.Vars
-import mindustry.gen.Building
-import mindustry.mod.Plugin
-import mindustry.world.Block
-import mindustry.world.Tile
-import kotlin.math.nextUp
-import kotlin.math.roundToInt
-import mindustry.game.EventType
 import mindurka.api.on
 import mindurka.api.sleep
 import mindurka.coreplugin.CorePlugin
 import mindurka.util.Async
+import mindurka.util.ModifyWorld
+import mindustry.Vars
 import mindustry.content.Blocks
 import mindustry.content.Fx
 import mindustry.content.StatusEffects
+import mindustry.game.EventType
 import mindustry.game.Team
+import mindustry.gen.Building
 import mindustry.gen.Call
 import mindustry.gen.Groups
 import mindustry.gen.PayloadUnit
 import mindustry.gen.Unit
+import mindustry.logic.LExecutor
+import mindustry.mod.Plugin
+import mindustry.net.Administration
 import mindustry.type.Category
+import mindustry.world.Block
+import mindustry.world.Tile
 import mindustry.world.blocks.ConstructBlock
 import mindustry.world.blocks.defense.BaseShield
 import mindustry.world.blocks.environment.Prop
 import mindustry.world.blocks.payloads.BuildPayload
 import java.lang.ref.WeakReference
 import kotlin.math.max
+import kotlin.math.nextUp
+import kotlin.math.roundToInt
 
 fun surroundingTiles(tile: Tile, block: Block, collect: Seq<Tile>): Seq<Tile> {
     collect.clear()
@@ -120,12 +128,123 @@ data class GameStage(
 }
 
 class Main: Plugin() {
+    companion object {
+        private val carbideWallsCatapult = ObjectMap<Building, Seq<Building>>();
+        @JvmStatic
+        fun carbideWallsCatapult(deconstructor: Building, other: Building) {
+            var buildings: Seq<Building>? = carbideWallsCatapult[deconstructor]
+            if (buildings != null) {
+                buildings.addUnique(other)
+                return
+            }
+
+            buildings = Seq.with(other)
+            carbideWallsCatapult.put(deconstructor, buildings)
+            val victims: Seq<Building> = buildings
+
+            Core.app.run {
+                carbideWallsCatapult.remove(deconstructor)
+                if (deconstructor.dead) {
+                    return@run
+                }
+
+                those@for (victim in victims) {
+                    if (victim.dead) {
+                        continue
+                    }
+                    if (victim.payload == null) {
+                        continue
+                    }
+                    if (victim.payload !is BuildPayload) {
+                        continue
+                    }
+                    if ((victim.payload as BuildPayload).block() != Blocks.carbideWall && (victim.payload as BuildPayload).block() != Blocks.carbideWallLarge) {
+                        continue
+                    }
+
+                    val build = (victim.takePayload() as BuildPayload).build
+
+                    var counter = 0
+
+                    for (dx in -10..9) a@ for (dy in -10..9) {
+                        val x: Int = deconstructor.tileX() + dx
+                        val y: Int = deconstructor.tileY() + dy
+
+                        if (x < 0 || y < 0 || x + 1 >= Vars.world.width() || y + 1 >= Vars.world.height()) continue
+
+                        for (ddx in 0..1) for (ddy in 0..1) {
+                            val tile = Vars.world.tile(x + ddx, y + ddy)
+                            if (tile.block() !== Blocks.air) {
+                                continue@a
+                            }
+                        }
+
+                        counter++
+                    }
+
+                    if (counter == 0) {
+                        val tile: Tile = deconstructor.tile
+                        tile.setNet(Blocks.air)
+                        Call.effect(Fx.titanSmokeLarge, deconstructor.getX(), deconstructor.getY(), 0f, Color.purple);
+                        Call.effect(Fx.titanSmokeLarge, deconstructor.getX(), deconstructor.getY(), 0f, Color.purple);
+                        Call.effect(Fx.titanSmokeLarge, deconstructor.getX(), deconstructor.getY(), 0f, Color.purple);
+                        Call.effect(Fx.scatheExplosion, deconstructor.getX(), deconstructor.getY(), 0f, Color.purple);
+                        Call.logicExplosion(
+                            Team.derelict, (tile.x * Vars.tilesize).toFloat(), (tile.y * Vars.tilesize).toFloat(), 80f, 4000f,
+                            true, true, false, true
+                        )
+                        return@run
+                    }
+
+                    counter = Mathf.random(counter - 1)
+
+                    for (dx in -10..9) a@ for (dy in -10..9) {
+                        val x: Int = deconstructor.tileX() + dx
+                        val y: Int = deconstructor.tileY() + dy
+
+                        if (x < 0 || y < 0 || x + 1 >= Vars.world.width() || y + 1 >= Vars.world.height()) continue
+
+                        for (ddx in 0..1) for (ddy in 0..1) {
+                            val tile = Vars.world.tile(x + ddx, y + ddy)
+                            if (tile.block() !== Blocks.air) {
+                                continue@a
+                            }
+                        }
+
+                        if (counter-- == 0) {
+                            val tile = Vars.world.tile(x, y)
+                            tile.setBlock(build.block,
+                                Team.derelict,
+                                build.rotation,
+                                Prov { build })
+                            ModifyWorld.netBlock(tile, build.block, build.team, build.rotation)
+                            ModifyWorld.syncBuild(victim)
+                            Call.effect(Fx.unitCapKill, build.getX(), build.getY(), 0f, Color.red);
+                        }
+                    }
+
+                    throw RuntimeException("Reached unreachable!")
+                }
+            }
+
+            ModifyWorld.syncBuild(deconstructor)
+        }
+
+        fun filterTeamPlans(team: Team) {
+            team.data().plans.retainAll { FortsRules.now.plots.canPlaceBlock(team, it.block, it.x.toInt(), it.y.toInt()) }
+        }
+    }
+
     private var epoch = 0L
     private var thorLastAt = IntIntMap()  // We are NOT playing for long enough for it to break. Just no.
     private var impactLastAt = IntIntMap()
     private var neoplasiaLastAt = IntIntMap()
 
     private var loading = true
+    private val blockDestroyLock = IntSet();
+
+    // Otherwise this crashes
+    private var builtInContentPatch: String = ""
 
     private fun epochMillis(): Int {
         if (epoch == 0L) epoch = Time.millis()
@@ -135,6 +254,8 @@ class Main: Plugin() {
     override fun init() {
         CorePlugin.init(javaClass)
 
+        builtInContentPatch = Streams.copyString(javaClass.classLoader.getResourceAsStream("patch.hjson"))
+
         initModifiers()
 
         on<SpecialSettingsLoad> { if (it.currentMap) FortsRules.now = FortsRules(it.rc) else FortsRules(it.rc) }
@@ -142,13 +263,23 @@ class Main: Plugin() {
         on<EventType.WorldLoadBeginEvent>(priority = Priority.Lowest) {
             loading = true
         }
-        on<EventType.PlayEvent> {
-            loading = false
+        on<EventType.PlayEvent>(priority = Priority.Highest) {
+            if (Vars.state.patcher.patches.size > 0 && Vars.state.patcher.patches[0].name == "Mindurka Default Patch") {
+                Vars.state.patcher.patches.remove(0)
+            }
+            Vars.state.patcher.apply(Vars.state.patcher.patches.map { it.patch }.apply { insert(0, builtInContentPatch) })
+
             thorLastAt.clear()
+            impactLastAt.clear()
+            neoplasiaLastAt.clear()
             epoch = 0L
+            Vars.state.rules.waveTeam = Team.derelict
+            blockDestroyLock.clear()
+
+            loading = false
         }
         on<BuildEvent>(priority = Priority.Low, listener = ::onBuild)
-        on<BuildEvent>(priority = Priority.High) {
+        on<BuildEvent>(priority = Priority.After) {
             val tile = it.tile
             val build = WeakReference(it.tile.build)
             val team = it.team()
@@ -200,7 +331,7 @@ class Main: Plugin() {
                     sleep((max(lastImpactAt, now) - now) / 1000f + FortsRules.now.impactDelay, lifetime = Lifetime.Round).await()
                     if (build.get() == null || build.get()!!.dead || build.get()!!.tile !== tile || tile.build !== build.get()) return@run
 
-                    tile.setNet(Blocks.largeShieldProjector)
+                    tile.setNet(Blocks.largeShieldProjector, team, 0)
                     if (FortsRules.now.impactInstakill) Groups.unit.each { unit ->
                         if (unit.dst(tile.build) > (Blocks.largeShieldProjector as BaseShield).radius) return@each
                         unit.kill()
@@ -224,7 +355,8 @@ class Main: Plugin() {
                     }
 
                     tile.setNet(Blocks.air)
-                    Call.logicExplosion(Team.derelict, ex, ey, FortsRules.now.impactExplosionRadius * Vars.tilesize, FortsRules.now.impactExplosionDamage, true, true, false, true)
+                    Log.info(FortsRules.now.impactExplosionRadius)
+                    Call.logicExplosion(Team.derelict, ex, ey, FortsRules.now.impactExplosionRadius, FortsRules.now.impactExplosionDamage, true, true, true, true)
                 }
                 FortsRules.now.neoplasiaBlock if FortsRules.now.neoplasiaEnabled -> Async.run {
                     val now = epochMillis()
@@ -243,7 +375,8 @@ class Main: Plugin() {
                     val rotation = ((build.rotation % 4) + 4) % 4
                     val dx = when (rotation) { 0 -> 1; 2 -> -1; else -> 0 }
                     val dy = when (rotation) { 1 -> 1; 3 -> -1; else -> 0 }
-                    val size = build.block.size
+                    val size = block.size
+                    val shift = 1 + (block.size - 1) / 2
 
                     val cancel = arrayOf<Cancel?>(null)
                     cancel[0] = interval(1 / FortsRules.now.neoplasiaProgressSpeed, lifetime = Lifetime.Round, run = object : Runnable {
@@ -260,8 +393,13 @@ class Main: Plugin() {
                             x += dx
                             y += dy
 
-                            for (player in Groups.player) {
-                                Call.effect(player.con, Fx.explosion, x * Vars.tilesize.toFloat(), y * Vars.tilesize.toFloat(), 0f, Color.yellow)
+                            for (d in 0..<block.size + 2) {
+                                val xx = (x + if (rotation % 2 == 1) d - shift else 0) * Vars.tilesize.toFloat()
+                                val yy = (y + if (rotation % 2 == 0) d - shift else 0) * Vars.tilesize.toFloat()
+                                for (player in Groups.player) {
+                                    Call.effect(player.con, Fx.explosion, xx, yy, 0f, Color.yellow)
+                                }
+                                LExecutor.logicExplosion(team, xx, yy, Vars.tilesize.toFloat() / 2, FortsRules.now.neoplasiaDamage, false, true, true, false)
                             }
                         }
                     })
@@ -274,7 +412,13 @@ class Main: Plugin() {
         on<EventType.BlockDestroyEvent> { event ->
             if (loading) return@on
 
-            FortsRules.now.plots.handleBlockBreak(event.tile.x.toInt(), event.tile.y.toInt())
+            val i = event.tile.x + event.tile.y * Vars.world.width()
+            if (blockDestroyLock.contains(i)) return@on
+            blockDestroyLock.add(i)
+            Core.app.post {
+                blockDestroyLock.remove(i)
+                FortsRules.now.plots.handleBlockBreak(event.tile.x.toInt(), event.tile.y.toInt())
+            }
         }
         on<EventType.BlockBuildBeginEvent> { event ->
             if (loading) return@on
@@ -291,15 +435,15 @@ class Main: Plugin() {
             if (unit.spawnedByCore) {
                 if (unit !is PayloadUnit) return
                 if (unit.payloads.size == 0) return
-                unit.apply(StatusEffects.slow, 2f)
+                unit.apply(StatusEffects.slow, 2f * 60)
                 if (unit.health > 350) unit.health = 340f
                 if (!unit.payloads.any { it is BuildPayload && it.block().category === Category.turret }) return
-                unit.apply(StatusEffects.burning, 2f)
-                unit.apply(StatusEffects.melting, 2f)
-                unit.apply(StatusEffects.corroded, 2f)
-                unit.apply(StatusEffects.sapped, 2f)
-                unit.apply(StatusEffects.slow, 2f)
-                unit.apply(StatusEffects.overclock, 2f)
+                unit.apply(StatusEffects.burning, 2f * 60)
+                unit.apply(StatusEffects.melting, 2f * 60)
+                unit.apply(StatusEffects.corroded, 2f * 60)
+                unit.apply(StatusEffects.sapped, 2f * 60)
+                unit.apply(StatusEffects.slow, 2f * 60)
+                unit.apply(StatusEffects.overclock, 2f * 60)
                 if (unit.health > 200) unit.health = 190f
             } else {
                 if (unit.type.naval) unit.apply(StatusEffects.boss, 9999f)
@@ -314,7 +458,17 @@ class Main: Plugin() {
         }
         on<EventType.PickupEvent> { reevalUnitEffects(it.carrier) }
 
-        CustomDestructor.load()
+        ClassPatches.load()
+
+        Vars.netServer.admins.addActionFilter { act ->
+            if (act.type != Administration.ActionType.placeBlock) return@addActionFilter true
+
+            if (!FortsRules.now.plots.canPlaceBlock(act.player.team(), act.block, act.tile.x.toInt(), act.tile.y.toInt())) {
+                Call.effect(act.player.con, Fx.breakBlock, act.tile.getX(), act.tile.getY(), act.block.size.toFloat(), Color.red)
+
+                false
+            } else true
+        }
 
         // UnitTypes.poly.health = 90f
         // UnitTypes.flare.health = 150f

@@ -1,21 +1,15 @@
 package forts
 
-import arc.graphics.Color
 import arc.struct.IntMap
 import arc.util.Log
 import arc.util.Strings
-import mindurka.api.Lifetime
 import mindurka.api.RulesContext
-import mindurka.api.timer
 import mindurka.util.FormatException
-import mindurka.util.ModifyWorld
 import mindurka.util.Schematic
 import mindustry.Vars
 import mindustry.content.Blocks
-import mindustry.content.Fx
 import mindustry.game.Team
-import mindustry.gen.Call
-import mindustry.gen.Groups
+import mindustry.world.Block
 import kotlin.run
 
 class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
@@ -179,6 +173,10 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
                 }
             }
         }
+
+        for (other in Team.all) {
+            Main.filterTeamPlans(team)
+        }
     }
 
     private fun _placeExpansionBlock(x: Int, y: Int, team: Team, delete: Runnable): Boolean {
@@ -223,12 +221,13 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
     override fun placeExpansionBlock(x: Int, y: Int, team: Team, delete: Runnable): Boolean {
         if (_placeExpansionBlock(x, y, team, delete)) return true
 
+        val shift = FortsRules.now.expansionBlock.size / 2
         val _x = if (x < startX) startX else if (x > startX + jX * plotsX) startX + jX * plotsX else x
         val _y = if (y < startY) startY else if (y > startY + jY * plotsY) startY + jY * plotsY else y
         val plotX = (_x - startX) / jX
         val plotY = (_y - startY) / jY
-        val inPlotX = (_x - (startX + jX * plotX)).toFloat() / jX
-        val inPlotY = (_y - (startY + jY * plotY)).toFloat() / jY
+        val inPlotX = (_x - (startX + jX * plotX)).toFloat() / (jX - shift * 2)
+        val inPlotY = (_y - (startY + jY * plotY)).toFloat() / (jY - shift * 2)
         Log.info("Plot ($_x, $_y), coords ($plotX, $plotY), float ($inPlotX, $inPlotY)")
         val dx = if (inPlotX <= 0.33f) -1 else if (inPlotX <= 0.66f) 0 else 1
         val dy = if (inPlotY <= 0.33f) -1 else if (inPlotY <= 0.66f) 0 else 1
@@ -319,5 +318,25 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
             if (teams(x, y).cores() != team) continue
             _handleBlockBreak(x, y)
         }
+    }
+
+    override fun canPlaceBlock(team: Team, block: Block, x: Int, y: Int): Boolean {
+        if (block.size > 2) return true
+
+        for (x in x - (block.size - 1) / 2..<x - (block.size - 1) / 2 + block.size) for (y in y - (block.size - 1) / 2..<y - (block.size - 1) / 2 + block.size) {
+            if (x < startX - 1 || y < startY - 1) continue
+            if (x >= startX + jX * plotsX) continue
+            if (y >= startY + jY * plotsY) continue
+
+            val px = (x - startX) % jX
+            val py = (y - startY) % jY
+
+            for (x in (x - startX) / jX..(x - startX) / jX + if (px == 0) 1 else 0) for (y in (y - startY) / jY..(y - startY) / jY + if (py == 0) 1 else 0) {
+                if (x < 0 || y < 0 || x >= plotsX || y >= plotsY) continue
+                if (states(x, y).placed() && teams(x, y) != team) return false
+            }
+        }
+
+        return true
     }
 }

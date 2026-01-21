@@ -49,7 +49,7 @@ class FortsRules(rc: RulesContext) {
     var expansionBlock = rc.r(EXPANSION_BLOCK, Blocks.impulsePump)
 
     var thorEnabled = rc.r(THOR_ENABLED, true)
-    var thorDelay = rc.r(THOR_DELAY, 0.25f)
+    var thorDelay = rc.r(THOR_DELAY, 0.5f)
     var thorCooldown = rc.r(THOR_COOLDOWN, 0.75f)
     var thorDamageMultiplier = rc.r(THOR_DAMAGE_MULTIPLIER, 1f)
     var thorRadiusMultiplier = rc.r(THOR_RADIUS_MULTIPLIER, 1f)
@@ -58,7 +58,7 @@ class FortsRules(rc: RulesContext) {
     var impactEnabled = rc.r(IMPACT_ENABLED, true)
     var impactDelay = rc.r(IMPACT_DELAY, 0f)
     var impactCooldown = rc.r(IMPACT_COOLDOWN, 5f)
-    var impactDuration = rc.r(IMPACT_DURATION, 0.25f)
+    var impactDuration = rc.r(IMPACT_DURATION, 0.45f)
     var impactExplosionDamage = rc.r(IMPACT_EXPLOSION_DAMAGE, 2000f)
     var impactExplosionRadius = rc.r(IMPACT_EXPLOSION_RADIUS, 4f) * Vars.tilesize
     var impactInstakill = rc.r(IMPACT_INSTAKILL, false)
