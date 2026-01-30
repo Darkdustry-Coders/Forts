@@ -25,6 +25,7 @@ import mindurka.coreplugin.CorePlugin
 import mindurka.util.Async
 import mindurka.util.ModifyWorld
 import mindustry.Vars
+import mindustry.ai.types.CommandAI
 import mindustry.content.Blocks
 import mindustry.content.Fx
 import mindustry.content.StatusEffects
@@ -257,6 +258,15 @@ class Main: Plugin() {
         builtInContentPatch = Streams.copyString(javaClass.classLoader.getResourceAsStream("patch.hjson"))
 
         initModifiers()
+
+        Vars.content.units().each {
+            val old = it.controller
+            it.controller = { unit ->
+                val controller = old[unit]
+                if (controller is CommandAI && controller !is ModCommandAi) ModCommandAi(enableUnitPayloads)
+                else controller
+            }
+        }
 
         on<SpecialSettingsLoad> { if (it.currentMap) FortsRules.now = FortsRules(it.rc) else FortsRules(it.rc) }
         on<EventType.GameOverEvent> { gameOver() }

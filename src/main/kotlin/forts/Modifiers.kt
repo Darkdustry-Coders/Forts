@@ -32,6 +32,8 @@ abstract class Modifier {
     open fun disableAssist(): Boolean = false
     open fun start() {}
     open fun onBuild(event: BuildEvent) {}
+
+    open val disableUnitPayloads: Boolean = false
 }
 
 fun Modifier.getName() = this.javaClass.simpleName.lowercase()
@@ -44,6 +46,8 @@ class AvailableModifier<T: Modifier>(val source: KClass<out T>, val create: Prov
         return this as AvailableModifier<Modifier>
     }
 }
+
+val enableUnitPayloads = Ref(true)
 
 private val modifierOrder: Array<KClass<out Modifier>> = arrayOf(
     forts.modifiers.Crazy::class,
@@ -85,6 +89,7 @@ fun addModifier(modifier: Modifier) {
     Log.info("Enabled modifier ${modifier.getName()}")
     Call.setRules(Vars.state.rules)
     reorderModifiers()
+    refresh()
 }
 fun removeModifiers(cb: Boolf<Modifier>) {
     val prevLen = modifiers.size
@@ -98,11 +103,16 @@ fun removeModifiers(cb: Boolf<Modifier>) {
     }.size != prevLen) {
         Call.setRules(Vars.state.rules)
         reorderModifiers()
+        refresh()
     }
 }
 
 fun onBuild(buildEvent: BuildEvent) {
     modifiers.each { it.onBuild(buildEvent) }
+}
+
+private fun refresh() {
+    enableUnitPayloads.r = modifiers.all { !it.disableUnitPayloads }
 }
 
 fun initModifiers() {
@@ -157,6 +167,8 @@ fun initModifiers() {
 
         modifiers.each { it.start() }
         modifiers.each { Log.info("yoo ${it.getName()}") }
+
+        refresh()
     }
 }
 

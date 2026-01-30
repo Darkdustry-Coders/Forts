@@ -1,5 +1,6 @@
 package forts.modifiers
 
+import arc.Core
 import forts.Modifier
 import mindurka.api.BuildEvent
 import mindurka.api.BuildEventPost
@@ -35,33 +36,38 @@ class Airforce: Modifier() {
         val tile = event.tile
 
         if (tile.block().category != Category.turret && tile.block() !in extraTurrets) return
-        val dyn = Vars.state.rules.unitCapVariable
-        val limit = Vars.state.rules.unitCap
-        Vars.state.rules.unitCapVariable = false
-        Vars.state.rules.unitCap = Int.MAX_VALUE
-        val uty: UnitType = when (tile.block().size) {
-            1 -> UnitTypes.mega
-            2 -> UnitTypes.mega
-            3 -> UnitTypes.quad
-            4 -> UnitTypes.quell
-            else -> UnitTypes.disrupt
+
+        Core.app.post {
+            val dyn = Vars.state.rules.unitCapVariable
+            val limit = Vars.state.rules.unitCap
+            Vars.state.rules.unitCapVariable = false
+            Vars.state.rules.unitCap = Int.MAX_VALUE
+            val uty: UnitType = when (tile.block().size) {
+                1 -> UnitTypes.mega
+                2 -> UnitTypes.mega
+                3 -> UnitTypes.quad
+                4 -> UnitTypes.quell
+                else -> UnitTypes.disrupt
+            }
+            val unit = uty.spawn(tile.build.team(), tile.drawx(), tile.drawy())
+            unit.maxHealth = tile.block().health.toFloat() *
+                Vars.state.rules.blockHealthMultiplier *
+                Vars.state.rules.teams.get(tile.team()).blockHealthMultiplier
+            unit.health = event.health()
+            if (unit.health < 2f) unit.health = 2f
+            Vars.state.rules.unitCap = limit
+            Vars.state.rules.unitCapVariable = dyn
+            if (unit == null) {
+                tile.setNet(Blocks.air)
+                return@post
+            }
+            assert(unit is PayloadUnit)
+            unit.apply(StatusEffects.disarmed, 999999f)
+            unit.apply(StatusEffects.invincible, 20f)
+            (unit as PayloadUnit).addPayload(BuildPayload(tile.build))
+            tile.setNet(Blocks.air)
         }
-        val unit = uty.spawn(tile.build.team(), tile.drawx(), tile.drawy())
-        unit.maxHealth = tile.block().health.toFloat() *
-            Vars.state.rules.blockHealthMultiplier *
-            Vars.state.rules.teams.get(tile.team()).blockHealthMultiplier
-        unit.health = event.health()
-        if (unit.health < 2f) unit.health = 2f
-        Vars.state.rules.unitCap = limit
-        Vars.state.rules.unitCapVariable = dyn
-        if (unit == null) {
-            event.replaceAir()
-            return
-        }
-        assert(unit is PayloadUnit)
-        unit.apply(StatusEffects.disarmed, 999999f)
-        unit.apply(StatusEffects.invincible, 5f)
-        (unit as PayloadUnit).addPayload(BuildPayload(tile.build))
-        event.replaceAir()
     }
+
+    override val disableUnitPayloads: Boolean get() = true
 }
