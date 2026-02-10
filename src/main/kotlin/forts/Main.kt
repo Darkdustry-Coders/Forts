@@ -273,12 +273,13 @@ class Main: Plugin() {
         on<EventType.WorldLoadBeginEvent>(priority = Priority.Lowest) {
             loading = true
         }
-        on<EventType.PlayEvent>(priority = Priority.Highest) {
+        on<EventType.WorldLoadEvent>(priority = Priority.Lowest) {
             if (Vars.state.patcher.patches.size > 0 && Vars.state.patcher.patches[0].name == "Mindurka Default Patch") {
                 Vars.state.patcher.patches.remove(0)
             }
             Vars.state.patcher.apply(Vars.state.patcher.patches.map { it.patch }.apply { insert(0, builtInContentPatch) })
-
+        }
+        on<EventType.PlayEvent>(priority = Priority.Highest) {
             thorLastAt.clear()
             impactLastAt.clear()
             neoplasiaLastAt.clear()
