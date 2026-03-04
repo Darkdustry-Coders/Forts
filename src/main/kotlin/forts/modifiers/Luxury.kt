@@ -23,7 +23,7 @@ class Luxury: Modifier() {
             }
         }
 
-        lifetime.bind(Cancel {
+        lifetime.alsoCancel(Cancel {
             Vars.state.rules.buildCostMultiplier /= 2f
             Vars.state.rules.buildSpeedMultiplier /= 2f
         })

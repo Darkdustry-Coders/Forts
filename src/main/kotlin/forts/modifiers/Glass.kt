@@ -28,7 +28,7 @@ class Glass: Modifier() {
             it.unit.health(10f)
         }
 
-        lifetime.bind(Cancel {
+        lifetime.alsoCancel(Cancel {
             Vars.state.rules.unitDamageMultiplier /= 4f;
             Vars.state.rules.unitCrashDamageMultiplier /= 4f;
         })

@@ -21,7 +21,7 @@ abstract class Modifier {
     var priority = 100
     val lifetime = object : Lifetime() {
         override fun uponStart() {
-            Round.bind(this)
+            Round.alsoCancel(this)
         }
         override fun uponEnd() {
             cancelled = false
