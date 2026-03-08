@@ -15,6 +15,7 @@ import arc.util.io.Streams
 import kotlinx.coroutines.future.await
 import mindurka.api.BuildEvent
 import mindurka.api.Cancel
+import mindurka.api.Gamemode
 import mindurka.api.Lifetime
 import mindurka.api.Priority
 import mindurka.api.SpecialSettingsLoad
@@ -221,6 +222,7 @@ class Main: Plugin() {
                             ModifyWorld.netBlock(tile, build.block, build.team, build.rotation)
                             ModifyWorld.syncBuild(victim)
                             Call.effect(Fx.unitCapKill, build.getX(), build.getY(), 0f, Color.red);
+                            continue@those
                         }
                     }
 
@@ -259,6 +261,8 @@ class Main: Plugin() {
 
         initModifiers()
 
+        Gamemode.defaultPatch = { builtInContentPatch }
+
         Vars.content.units().each {
             val old = it.controller
             it.controller = { unit ->
@@ -272,12 +276,6 @@ class Main: Plugin() {
         on<EventType.GameOverEvent> { gameOver() }
         on<EventType.WorldLoadBeginEvent>(priority = Priority.Lowest) {
             loading = true
-        }
-        on<EventType.WorldLoadEvent>(priority = Priority.Lowest) {
-            if (Vars.state.patcher.patches.size > 0 && Vars.state.patcher.patches[0].name == "Mindurka Default Patch") {
-                Vars.state.patcher.patches.remove(0)
-            }
-            Vars.state.patcher.apply(Vars.state.patcher.patches.map { it.patch }.apply { insert(0, builtInContentPatch) })
         }
         on<EventType.PlayEvent>(priority = Priority.Highest) {
             thorLastAt.clear()
