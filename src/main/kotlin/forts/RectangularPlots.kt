@@ -1,14 +1,18 @@
 package forts
 
+import arc.graphics.Color
+import arc.math.Mathf
 import arc.struct.IntMap
-import arc.util.Log
+import arc.struct.IntSeq
 import arc.util.Strings
 import mindurka.api.RulesContext
 import mindurka.util.FormatException
 import mindurka.util.Schematic
 import mindustry.Vars
 import mindustry.content.Blocks
+import mindustry.content.Fx
 import mindustry.game.Team
+import mindustry.gen.Call
 import mindustry.world.Block
 import kotlin.run
 
@@ -190,14 +194,8 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
             val plotY = (y - startY) / jY + dy
 
             if (dx == 0 && dy == 0) {
-                if (!states(plotX, plotY).placeable()) {
-                    Log.info("Plot already there ig")
-                    return false
-                }
-            } else if (states(plotX, plotY).placed() && teams(plotX, plotY) != team) {
-                Log.info("Enemy plot on $plotX, $plotY")
-                return false
-            }
+                if (!states(plotX, plotY).placeable()) return false
+            } else if (states(plotX, plotY).placed() && teams(plotX, plotY) != team) return false
         }
 
         delete.run()
@@ -216,6 +214,20 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
             tile.setNet(Blocks.scrapWall, team, 0)
         }
 
+        for (team in Team.all) {
+            if (team.core() == null) continue
+            team.data().plans.removeAll { plan ->
+                when (plan.block.size) {
+                    1 -> shouldClearPlanCoord(plan.x.toInt(), plan.y.toInt(), team)
+                    2 -> shouldClearPlanCoord(plan.x.toInt(), plan.y.toInt(), team) ||
+                        shouldClearPlanCoord(plan.x.toInt() + 1, plan.y.toInt(), team) ||
+                        shouldClearPlanCoord(plan.x.toInt(), plan.y.toInt() + 1, team) ||
+                        shouldClearPlanCoord(plan.x.toInt() + 1, plan.y.toInt() + 1, team)
+                    else -> false
+                }
+            }
+        }
+
         return true
     }
     override fun placeExpansionBlock(x: Int, y: Int, team: Team, delete: Runnable): Boolean {
@@ -228,7 +240,6 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
         val plotY = (_y - startY) / jY
         val inPlotX = (_x - (startX + jX * plotX)).toFloat() / (jX - shift * 2)
         val inPlotY = (_y - (startY + jY * plotY)).toFloat() / (jY - shift * 2)
-        Log.info("Plot ($_x, $_y), coords ($plotX, $plotY), float ($inPlotX, $inPlotY)")
         val dx = if (inPlotX <= 0.33f) -1 else if (inPlotX <= 0.66f) 0 else 1
         val dy = if (inPlotY <= 0.33f) -1 else if (inPlotY <= 0.66f) 0 else 1
 
@@ -239,14 +250,24 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
         if (plotX < 0 || plotY < 0 || plotX >= plotsX || plotY >= plotsY) return
         if (!states(plotX, plotY).breakable(teams(plotX, plotY))) return
 
-        var score = 0
+        var score = 0f
 
         for (dx in 0..<jX + wallsSize) for (dy in 0..<jY + wallsSize) {
             val x = plotX * jX + startX - wallsSize + dx
             val y = plotY * jY + startY - wallsSize + dy
             val tile = Vars.world.tile(x, y) ?: continue
-            score += blockTileWorth(tile.block())
-            if (score >= 2) return
+            score += tile.build?.health ?: 0f
+            if (score >= 450) return
+        }
+
+        val smokeColor = Color(); smokeColor.rgba8888(0x0c0c0c7a)
+        val drillColor = Color(); drillColor.rgba8888(0xffac00ffL.toUInt().toInt())
+        for (dx in -1..jX + wallsSize) for (dy in -1..jY + wallsSize) {
+            val x = plotX * jX + startX - wallsSize + dx.toFloat()
+            val y = plotY * jY + startY - wallsSize + dy.toFloat()
+
+            if (Mathf.random() > 0.65f) Call.effect(Fx.smokeCloud, x * Vars.tilesize, y * Vars.tilesize, 0f, smokeColor)
+            if (Mathf.random() > 0.45f) Call.effect(Fx.drillSteam, x * Vars.tilesize, y * Vars.tilesize, 0f, drillColor)
         }
 
         states(plotX, plotY, PlotStateTag.Enabled)
@@ -297,9 +318,41 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
             }
         }
     }
-    override fun handleBlockBreak(x: Int, y: Int) {
-        if (x < startX - wallsSize || y < startY - wallsSize) return
-        if (x >= startX + plotsX * jX || y >= startY + plotsY * jY) return
+    private inline fun shouldClearPlan(plotX: Int, plotY: Int, team: Team): Boolean =
+        if (plotX < 0 || plotY < 0 || plotX >= plotsX || plotY >= plotsY) false
+        else states(plotX, plotY).placed() && teams(plotX, plotY) != team
+    private inline fun shouldClearPlanCoord(x: Int, y: Int, team: Team): Boolean {
+        if (x < startX - wallsSize || y < startY - wallsSize) return false
+        if (x >= startX + plotsX * jX || y >= startY + plotsY * jY) return false
+
+        // Shifted by `wallsSize` for easier handling.
+        val plotX = (x - startX + wallsSize) / jX
+        val plotY = (y - startY + wallsSize) / jY
+        val inPlotX = x - (plotX * jX + startX - wallsSize)
+        val inPlotY = y - (plotY * jY + startY - wallsSize)
+
+        if (shouldClearPlan(plotX, plotY, team)) return true
+        if (inPlotX == 0 && plotX != 0 && shouldClearPlan(plotX - 1, plotY, team)) return true
+        if (inPlotY == 0 && plotY != 0 && shouldClearPlan(plotX, plotY - 1, team)) return true
+        if (inPlotX == 0 && inPlotY == 0 &&
+            plotX != 0 && plotY != 0 &&
+            shouldClearPlan(plotX - 1, plotY - 1, team)) return true
+
+        return false
+    }
+    private inline fun handleBlockBreakImpl(x: Int, y: Int, teams: ((Team) -> kotlin.Unit) -> kotlin.Unit) {
+        teams { team ->
+            team.data().plans.removeAll { plan ->
+                when (plan.block.size) {
+                    1 -> shouldClearPlanCoord(plan.x.toInt(), plan.y.toInt(), team)
+                    2 -> shouldClearPlanCoord(plan.x.toInt(), plan.y.toInt(), team) ||
+                        shouldClearPlanCoord(plan.x.toInt() + 1, plan.y.toInt(), team) ||
+                        shouldClearPlanCoord(plan.x.toInt(), plan.y.toInt() + 1, team) ||
+                        shouldClearPlanCoord(plan.x.toInt() + 1, plan.y.toInt() + 1, team)
+                    else -> false
+                }
+            }
+        }
 
         val plotX = (x - startX) / jX
         val plotY = (y - startY) / jY
@@ -311,6 +364,16 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
         if (inPlotY >= height) _handleBlockBreak(plotX, plotY + 1)
         if (inPlotX >= width && inPlotY >= height) _handleBlockBreak(plotX + 1, plotY + 1)
     }
+    override fun handleBlockBreak(x: Int, y: Int, checkTeams: IntSeq) {
+        handleBlockBreakImpl(x, y) { cb ->
+            for (i in 0..<checkTeams.size) {
+                cb(Team.all[checkTeams.items[i]])
+            }
+        }
+    }
+    override fun handleBlockBreak(x: Int, y: Int, checkTeam: Team) {
+        handleBlockBreakImpl(x, y) { cb -> cb(checkTeam) }
+    }
 
     override fun handleTeamDeath(team: Team) {
         for (x in 0..<plotsX) for (y in 0..<plotsY) {
@@ -320,22 +383,41 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
         }
     }
 
+    private inline fun _canPlaceBlock(team: Team, block: Block, plotX: Int, plotY: Int): Boolean =
+        if (plotX >= plotsX || plotY >= plotsY) true
+        else !states(plotX, plotY).placed() || teams(plotX, plotY) == team
     override fun canPlaceBlock(team: Team, block: Block, x: Int, y: Int): Boolean {
         if (block.size > 2) return true
 
-        for (x in x - (block.size - 1) / 2..<x - (block.size - 1) / 2 + block.size) for (y in y - (block.size - 1) / 2..<y - (block.size - 1) / 2 + block.size) {
-            if (x < startX - 1 || y < startY - 1) continue
-            if (x >= startX + jX * plotsX) continue
-            if (y >= startY + jY * plotsY) continue
+        if (x < startX - wallsSize || y < startY - wallsSize) return true
+        if (x >= startX + plotsX * jX || y >= startY + plotsY * jY) return true
 
-            val px = (x - startX) % jX
-            val py = (y - startY) % jY
+        // Shifted by `wallsSize` for easier handling.
+        val plotX = (x - startX + wallsSize) / jX
+        val plotY = (y - startY + wallsSize) / jY
+        val inPlotX = x - (plotX * jX + startX - wallsSize)
+        val inPlotY = y - (plotY * jY + startY - wallsSize)
 
-            for (x in (x - startX) / jX..(x - startX) / jX + if (px == 0) 1 else 0) for (y in (y - startY) / jY..(y - startY) / jY + if (py == 0) 1 else 0) {
-                if (x < 0 || y < 0 || x >= plotsX || y >= plotsY) continue
-                if (states(x, y).placed() && teams(x, y) != team) return false
-            }
-        }
+        if (!_canPlaceBlock(team, block, plotX, plotY)) return false
+        if (inPlotX == 0 && plotX != 0 && !_canPlaceBlock(team, block, plotX - 1, plotY)) return false
+        if (inPlotY == 0 && plotY != 0 && !_canPlaceBlock(team, block, plotX, plotY - 1)) return false
+        if (inPlotX == 0 && inPlotY == 0 &&
+            plotX != 0 && plotY != 0 &&
+            !_canPlaceBlock(team, block, plotX - 1, plotY - 1)) return false
+
+        // for (x in x - (block.size - 1) / 2..<x - (block.size - 1) / 2 + block.size) for (y in y - (block.size - 1) / 2..<y - (block.size - 1) / 2 + block.size) {
+        //     if (x < startX - 1 || y < startY - 1) continue
+        //     if (x >= startX + jX * plotsX) continue
+        //     if (y >= startY + jY * plotsY) continue
+
+        //     val px = (x - startX) % jX
+        //     val py = (y - startY) % jY
+
+        //     for (x in (x - startX) / jX..(x - startX) / jX + if (px == 0) 1 else 0) for (y in (y - startY) / jY..(y - startY) / jY + if (py == 0) 1 else 0) {
+        //         if (x < 0 || y < 0 || x >= plotsX || y >= plotsY) continue
+        //         if (states(x, y).placed() && teams(x, y) != team) return false
+        //     }
+        // }
 
         return true
     }

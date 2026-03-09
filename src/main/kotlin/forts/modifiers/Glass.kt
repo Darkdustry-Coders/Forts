@@ -17,6 +17,7 @@ class Glass: Modifier() {
         Vars.state.rules.unitCrashDamageMultiplier *= 4f;
 
         interval(0.2f, lifetime = lifetime) {
+            if (Vars.state.isPaused) return@interval
             Groups.unit.each {
                 if (it.isPlayer && !(it is PayloadUnit && !it.payloads.isEmpty)) return@each
                 if (it.health() > 10f) it.health(10f)

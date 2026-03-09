@@ -14,6 +14,7 @@ class Decay: Modifier() {
 
     override fun start() {
         interval(1f, lifetime = lifetime) {
+            if (Vars.state.isPaused) return@interval
             amount += 0.02f
             repeat(amount.toInt()) {
                 val len = Groups.build.size()

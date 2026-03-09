@@ -14,6 +14,7 @@ import mindurka.api.Consts
 import mindurka.api.Priority
 import mindurka.api.on
 import mindustry.content.Blocks
+import mindustry.world.blocks.legacy.LegacyBlock
 
 class Crazy: Modifier() {
     val morphMap = IntIntMap()
@@ -26,7 +27,7 @@ class Crazy: Modifier() {
         val free = Vars.content.blocks()
             .select { it !is ConstructBlock }
         Vars.content.blocks()
-            .each<Block>({ it !is ConstructBlock && it !in Consts.legacyBlocks }) {
+            .each<Block>({ it !is ConstructBlock && it !is LegacyBlock }) {
                 while (true) {
                     val idx = Mathf.random(0, free.size - 1)
                     val obj = free[idx]
@@ -36,9 +37,6 @@ class Crazy: Modifier() {
                     break
                 }
             }
-
-        on<BuildEvent>(lifetime = lifetime, priority = Priority.Low) {
-        }
     }
 
     override fun onBuild(event: BuildEvent) {

@@ -5,6 +5,8 @@ import arc.func.Prov
 import arc.graphics.Color
 import arc.math.Mathf
 import arc.struct.IntIntMap
+import arc.struct.IntMap
+import arc.struct.IntSeq
 import arc.struct.IntSet
 import arc.struct.ObjectMap
 import arc.struct.Seq
@@ -12,6 +14,7 @@ import arc.util.CommandHandler
 import arc.util.Log
 import arc.util.Time
 import arc.util.io.Streams
+import buj.tl.Tl
 import kotlinx.coroutines.future.await
 import mindurka.api.BuildEvent
 import mindurka.api.Cancel
@@ -22,9 +25,11 @@ import mindurka.api.SpecialSettingsLoad
 import mindurka.api.interval
 import mindurka.api.on
 import mindurka.api.sleep
+import mindurka.api.timer
 import mindurka.coreplugin.CorePlugin
 import mindurka.util.Async
 import mindurka.util.ModifyWorld
+import mindurka.util.Ops
 import mindustry.Vars
 import mindustry.ai.types.CommandAI
 import mindustry.content.Blocks
@@ -36,7 +41,9 @@ import mindustry.gen.Building
 import mindustry.gen.Call
 import mindustry.gen.Groups
 import mindustry.gen.PayloadUnit
+import mindustry.gen.Player
 import mindustry.gen.Unit
+import mindustry.gen.WorldLabel
 import mindustry.logic.LExecutor
 import mindustry.mod.Plugin
 import mindustry.net.Administration
@@ -47,10 +54,14 @@ import mindustry.world.blocks.ConstructBlock
 import mindustry.world.blocks.defense.BaseShield
 import mindustry.world.blocks.environment.Prop
 import mindustry.world.blocks.payloads.BuildPayload
+import mindustry.world.blocks.storage.CoreBlock
 import java.lang.ref.WeakReference
+import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.nextUp
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 fun surroundingTiles(tile: Tile, block: Block, collect: Seq<Tile>): Seq<Tile> {
     collect.clear()
@@ -242,9 +253,12 @@ class Main: Plugin() {
     private var thorLastAt = IntIntMap()  // We are NOT playing for long enough for it to break. Just no.
     private var impactLastAt = IntIntMap()
     private var neoplasiaLastAt = IntIntMap()
+    private val mainCores = IntMap<CoreBlock.CoreBuild>()
+    private val helpLabels = IntMap<UnsyncLabel>()
+    private val helpLabelsPlayerTimers = ObjectMap<Player, Cancel>()
 
     private var loading = true
-    private val blockDestroyLock = IntSet();
+    private val blockDestroyLock = IntMap<IntSeq>();
 
     // Otherwise this crashes
     private var builtInContentPatch: String = ""
@@ -285,7 +299,54 @@ class Main: Plugin() {
             Vars.state.rules.waveTeam = Team.derelict
             blockDestroyLock.clear()
 
+            mainCores.clear()
+            helpLabels.clear()
+            helpLabelsPlayerTimers.clear()
+            for (team in Team.all) {
+                if (team == Team.derelict) continue
+                val core = team.core() ?: continue
+                mainCores.put(team.id, core)
+                val label = UnsyncLabel()
+                label.textGen = { player ->
+                    Tl.fmt(player).done("{forts.notice.help}")
+                }
+                label.x = core.x
+                label.y = core.y
+                label.flags = Ops.bitOr(WorldLabel.flagBackground, WorldLabel.flagOutline)
+                label.add()
+                helpLabels.put(team.id, label)
+            }
+
+            val color = Color()
+            var part = 0
+            interval(0.02f, lifetime = Lifetime.Round) {
+                part = (part + 1) % 32
+                val angle = Mathf.PI2 / 32 * part
+                val dx = cos(angle) * Vars.tilesize * 3
+                val dy = sin(angle) * Vars.tilesize * 3
+                mainCores.values().forEach { core ->
+                    color.set(core.team.color)
+                    color.set(
+                        min(color.r * 1.4f, 1f),
+                        min(color.g * 1.4f, 1f),
+                        min(color.b * 1.4f, 1f),
+                    )
+                    Call.effect(Fx.colorTrail, core.x + dx, core.y + dy, 2f, color)
+                    Call.effect(Fx.colorTrail, core.x - dx, core.y - dy, 2f, color)
+                }
+            }
+
             loading = false
+        }
+        on<EventType.PlayerConnectionConfirmed> {
+            helpLabelsPlayerTimers[it.player]?.cancel()
+            helpLabels.values().forEach { label -> label.syncFor(it.player) }
+            helpLabelsPlayerTimers.put(it.player, timer(30f) {
+                helpLabels.values().forEach { label -> label.removeFor(it.player) }
+            })
+        }
+        on<EventType.PlayerLeave> {
+            helpLabelsPlayerTimers[it.player]?.cancel()
         }
         on<BuildEvent>(priority = Priority.Low, listener = ::onBuild)
         on<BuildEvent>(priority = Priority.After) {
@@ -421,23 +482,36 @@ class Main: Plugin() {
         on<EventType.BlockDestroyEvent> { event ->
             if (loading) return@on
 
-            val i = event.tile.x + event.tile.y * Vars.world.width()
-            if (blockDestroyLock.contains(i)) return@on
-            blockDestroyLock.add(i)
-            Core.app.post {
-                blockDestroyLock.remove(i)
-                FortsRules.now.plots.handleBlockBreak(event.tile.x.toInt(), event.tile.y.toInt())
+            val x = event.tile.build?.tileX() ?: event.tile.x.toInt()
+            val y = event.tile.build?.tileY() ?: event.tile.y.toInt()
+
+            FortsRules.now.plots.handleBlockBreak(x, y, event.tile.team())
+
+            val team = event.tile.team().id
+            mainCores[team]?.let { core ->
+                if (event.tile.build !== core) return@let
+                event.tile.team().cores().each { target ->
+                    target.kill()
+                    Call.logicExplosion(Team.derelict,
+                        target.x, target.y,
+                        64f, 10000f,
+                        true, true, true, true)
+                }
+                mainCores.remove(team)
+                helpLabels.remove(team)?.remove()
             }
         }
         on<EventType.BlockBuildBeginEvent> { event ->
             if (loading) return@on
+            if (!event.breaking) return@on
 
-            FortsRules.now.plots.handleBlockBreak(event.tile.x.toInt(), event.tile.y.toInt())
+            FortsRules.now.plots.handleBlockBreak(event.tile.x.toInt(), event.tile.y.toInt(), event.team)
         }
         on<EventType.BlockBuildEndEvent> { event ->
             if (loading) return@on
+            if (!event.breaking) return@on
 
-            FortsRules.now.plots.handleBlockBreak(event.tile.x.toInt(), event.tile.y.toInt())
+            FortsRules.now.plots.handleBlockBreak(event.tile.x.toInt(), event.tile.y.toInt(), event.team)
         }
 
         fun reevalUnitEffects(unit: Unit) {
@@ -473,7 +547,8 @@ class Main: Plugin() {
             if (act.type != Administration.ActionType.placeBlock) return@addActionFilter true
 
             if (!FortsRules.now.plots.canPlaceBlock(act.player.team(), act.block, act.tile.x.toInt(), act.tile.y.toInt())) {
-                Call.effect(act.player.con, Fx.breakBlock, act.tile.getX(), act.tile.getY(), act.block.size.toFloat(), Color.red)
+                val extra = act.block.size.toFloat() * Vars.tilesize / 2
+                Call.effect(act.player.con, Fx.breakBlock, act.tile.getX() + extra, act.tile.getY() + extra, act.block.size.toFloat(), Color.red)
 
                 false
             } else true

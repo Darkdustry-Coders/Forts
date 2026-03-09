@@ -5,6 +5,13 @@ notice.modifiers = [cyan]Enabled modifier{if {modifiers.len} != 1 then s}:
                  = {forts.modifiers.{modifier}.desc})
                  = split (,) join (\n)}
 
+notice.help = [scarlet]Destroy the enemy fort!
+            =
+            = [accent]Build[][white]  to expand your base.
+            = If there are too few buildings
+            = left on a platform, it will
+            = [cyan]collapse[].
+
 [forts.modifiers]
 airforce.name = Airforce
 airforce.desc = All built turrets are held by units.

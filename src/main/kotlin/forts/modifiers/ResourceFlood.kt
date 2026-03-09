@@ -3,7 +3,9 @@ package forts.modifiers
 import arc.util.Time
 import forts.Modifier
 import mindurka.api.interval
+import mindurka.api.on
 import mindustry.Vars
+import mindustry.game.EventType
 import mindustry.game.Team
 import kotlin.math.min
 
@@ -16,12 +18,16 @@ class ResourceFlood: Modifier() {
         var untilFast = 200f
         var inc = 0f
 
-        interval(0.01f, lifetime = lifetime) {
+        on<EventType.Trigger>(lifetime = lifetime) {
+            if (it != EventType.Trigger.update) return@on
+            if (Vars.state.isPaused) return@on
+
             val delta = (Time.millis() - lastTime).toFloat() / 1000f
             lastTime = Time.millis()
             inc += delta * 100 / (if (untilFast <= 0f) 2f else 6f)
             val intInc = inc.toInt()
             inc %= 1
+
             Team.all.forEach {
                 val cap = if (untilFast <= 0) 2000 else 1000
                 val core = it.core() ?: return@forEach

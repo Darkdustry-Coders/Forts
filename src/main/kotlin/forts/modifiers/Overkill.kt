@@ -11,7 +11,7 @@ class Overkill: Modifier() {
     override fun chance() = 0.1f
 
     override fun start() {
-        on<EventType.BlockDestroyEvent> {
+        on<EventType.BlockDestroyEvent>(lifetime = lifetime) {
             if (it.tile.build == null) return@on
             if (it.tile.build is ConstructBlock.ConstructBuild) return@on
             if (it.tile.build.team == Team.derelict) return@on
