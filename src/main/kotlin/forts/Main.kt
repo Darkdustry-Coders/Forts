@@ -258,7 +258,8 @@ class Main: Plugin() {
     private val helpLabelsPlayerTimers = ObjectMap<Player, Cancel>()
 
     private var loading = true
-    private val blockDestroyLock = IntMap<IntSeq>();
+    private val blockDestroyLock = IntMap<IntSeq>()
+    private var blockKilledRecursionLock = false
 
     // Otherwise this crashes
     private var builtInContentPatch: String = ""
@@ -491,6 +492,7 @@ class Main: Plugin() {
             mainCores[team]?.let { core ->
                 if (event.tile.build !== core) return@let
                 event.tile.team().cores().each { target ->
+                    if (target.dead) return@each
                     target.kill()
                     Call.logicExplosion(Team.derelict,
                         target.x, target.y,

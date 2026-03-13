@@ -7,38 +7,66 @@ import mindustry.content.Blocks
 
 class FortsRules(rc: RulesContext) {
     companion object {
+        @JvmField
         val PREFIX = "${SpecialSettings.PREFIX}.forts"
+        @JvmField
         val ENABLE_1VA = "$PREFIX.enable_1va"
+        @JvmField
         val ENABLE_VNW = "$PREFIX.enable_vnw"
+        @JvmField
         val EXPANSION_BLOCK = "$PREFIX.expansion_block"
 
+        @JvmField
         val THOR_PREFIX = "$PREFIX.thor"
+        @JvmField
         val THOR_ENABLED = "$THOR_PREFIX.enabled"
+        @JvmField
         val THOR_DELAY = "$THOR_PREFIX.delay"
+        @JvmField
         val THOR_COOLDOWN = "$THOR_PREFIX.cooldown"
+        @JvmField
         val THOR_DAMAGE_MULTIPLIER = "$THOR_PREFIX.damage_multiplier"
+        @JvmField
         val THOR_RADIUS_MULTIPLIER = "$THOR_PREFIX.radius_multiplier"
+        @JvmField
         val THOR_BLOCK = "$THOR_PREFIX.block"
 
+        @JvmField
         val IMPACT_PREFIX = "$PREFIX.impact"
+        @JvmField
         val IMPACT_ENABLED = "$IMPACT_PREFIX.enabled"
+        @JvmField
         val IMPACT_DELAY = "$IMPACT_PREFIX.delay"
+        @JvmField
         val IMPACT_COOLDOWN = "$IMPACT_PREFIX.cooldown"
+        @JvmField
         val IMPACT_DURATION = "$IMPACT_PREFIX.duration"
+        @JvmField
         val IMPACT_EXPLOSION_DAMAGE = "$IMPACT_PREFIX.explosion_damage"
+        @JvmField
         val IMPACT_EXPLOSION_RADIUS = "$IMPACT_PREFIX.explosion_radius"
+        @JvmField
         val IMPACT_INSTAKILL = "$IMPACT_PREFIX.instakill"
+        @JvmField
         val IMPACT_BLOCK = "$IMPACT_PREFIX.block"
 
         val NEOPLASIA_PREFIX = "$PREFIX.neoplasia"
+        @JvmField
         val NEOPLASIA_ENABLED = "$NEOPLASIA_PREFIX.enabled"
+        @JvmField
         val NEOPLASIA_DELAY = "$NEOPLASIA_PREFIX.delay"
+        @JvmField
         val NEOPLASIA_COOLDOWN = "$NEOPLASIA_PREFIX.cooldown"
+        @JvmField
         val NEOPLASIA_LENGTH = "$NEOPLASIA_PREFIX.length"
+        @JvmField
         val NEOPLASIA_PROGRESS_SPEED = "$NEOPLASIA_PREFIX.progress_speed"
+        @JvmField
         val NEOPLASIA_DAMAGE = "$NEOPLASIA_PREFIX.damage"
+        @JvmField
         val NEOPLASIA_BLOCK = "$NEOPLASIA_PREFIX.block"
 
+        @JvmField
         val PLOT_PREFIX = "$PREFIX.plot"
 
         lateinit var now: FortsRules

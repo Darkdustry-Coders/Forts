@@ -5,6 +5,7 @@ import arc.math.Mathf
 import arc.struct.IntMap
 import arc.struct.IntSeq
 import arc.util.Strings
+import arc.util.Log
 import mindurka.api.RulesContext
 import mindurka.util.FormatException
 import mindurka.util.Schematic
@@ -68,8 +69,8 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
     val wallsSize = rc.r(WALLS_SIZE, 1).let { if (it !in 1..MAX_SIZE) 1 else it }
     private val jX = width + wallsSize
     private val jY = height + wallsSize
-    val startX = rc.r(SHIFT_X, 0).let { if (it !in 1..MAX_SIZE) 1 else it } % jX
-    val startY = rc.r(SHIFT_Y, 0).let { if (it !in 1..MAX_SIZE) 1 else it } % jY
+    val startX = rc.r(SHIFT_X, 0).let { (((it % jX) + jX) % jX).let { if (it !in 0..MAX_SIZE) 0 else it } }
+    val startY = rc.r(SHIFT_Y, 0).let { (((it % jY) + jY) % jY).let { if (it !in 0..MAX_SIZE) 0 else it } }
     val plotsX = (rc.mapWidth - startX + wallsSize) / jX
     val plotsY = (rc.mapHeight - startY + wallsSize) / jY
     val teams: ByteArray = ByteArray(plotsX * plotsY)
@@ -89,9 +90,11 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
     init { run {
         for (key in rc.rules.tags.keys()) {
             val team = keySchematicTeam(key) ?: continue
+            Log.info("Found team key: $key")
             try {
                 val scheme = Schematic.of(rc.rules.tags.get(key))
                 if (scheme.width != width + wallsSize * 2 || scheme.height != height + wallsSize * 2) {
+                    Log.info("Scheme's FUCKED (${scheme.width} vs ${width + wallsSize * 2}, ${scheme.height} vs ${height + wallsSize * 2})")
                     continue
                 }
                 plotSchematics.put(team.id, scheme)
@@ -102,18 +105,33 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
         }
 
         val statesS = rc.r(STATES, "")
-        if (statesS.length != states.size * 3) return@run
+        if (statesS.length != states.size * 3) {
+            Log.err("Invalid states length! (${statesS.length} vs ${states.size * 3})")
+            return@run
+        }
 
         var chars = statesS.chars().iterator()
         for (ignored /* IDEA shut up */ in 0..<plotsX * plotsY) {
             var ch = chars.nextInt()
-            if (ch < 'a'.code) return@run
-            if (ch - 'a'.code >= PlotStateTag.entries.size) return@run
+            if (ch < 'a'.code) {
+                Log.err("Invalid plot kind! ($ch)")
+                return@run
+            }
+            if (ch - 'a'.code >= PlotStateTag.entries.size) {
+                Log.err("Invalid plot kind! ($ch)")
+                return@run
+            }
 
             ch = chars.nextInt()
-            if (ch !in '0'.code..'9'.code && ch !in 'a'.code..'f'.code) return@run
+            if (ch !in '0'.code..'9'.code && ch !in 'a'.code..'f'.code) {
+                Log.err("Invalid team! ([0] = $ch)")
+                return@run
+            }
             ch = chars.nextInt()
-            if (ch !in '0'.code..'9'.code && ch !in 'a'.code..'f'.code) return@run
+            if (ch !in '0'.code..'9'.code && ch !in 'a'.code..'f'.code) {
+                Log.err("Invalid team! ([1] = $ch)")
+                return@run
+            }
         }
         chars = statesS.chars().iterator()
         for (cursor in 0..<plotsX * plotsY) {
@@ -211,6 +229,8 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
             val tile = Vars.world.tile(x, y) ?: continue
 
             if (tile.block() != Blocks.air) continue
+            if (!tile.floor().placeableOn) continue
+            if (tile.floor().isLiquid && !tile.floor().shallow) continue
             tile.setNet(Blocks.scrapWall, team, 0)
         }
 
