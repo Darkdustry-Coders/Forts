@@ -34,6 +34,7 @@ abstract class Modifier {
     open fun onBuild(event: BuildEvent) {}
 
     open val disableUnitPayloads: Boolean = false
+    open val canBeEnabled: Boolean = true
 }
 
 fun Modifier.getName() = this.javaClass.simpleName.lowercase()
@@ -61,6 +62,7 @@ private val modifierOrder: Array<KClass<out Modifier>> = arrayOf(
     forts.modifiers.Decay::class,
     forts.modifiers.Luxury::class,
     forts.modifiers.Airforce::class,
+    forts.modifiers.Copper::class,
 )
 val availableModifiers = Array(modifierOrder.size) {
     val klass = modifierOrder[it]
@@ -84,6 +86,10 @@ private fun reorderModifiers() {
     }
 }
 fun addModifier(modifier: Modifier) {
+    if (!modifier.canBeEnabled) {
+        Log.err("Modifier ${modifier.getName()} cannot be enabled")
+        return
+    }
     modifiers.add(modifier)
     modifier.start()
     Log.info("Enabled modifier ${modifier.getName()}")
@@ -95,6 +101,11 @@ fun removeModifiers(cb: Boolf<Modifier>) {
     val prevLen = modifiers.size
     if (modifiers.removeAll {
         if (cb.get(it)) {
+            if (!it.canBeEnabled) {
+                Log.err("Modifier ${it.getName()} cannot be disabled")
+                return@removeAll false
+            }
+
             it.lifetime.cancel()
             Log.info("Disabled modifier ${it.getName()}")
             return@removeAll true
@@ -121,7 +132,7 @@ fun initModifiers() {
         modifiers.clear()
     }
 
-    on<EventType.PlayEvent> {
+    on<EventType.WorldLoadEvent> {
         if (Mathf.random() < 0.7) return@on
         // if (SpecialSettings.formatVersion == FormatVersion.Zero && SpecialSettings.flagOrError("nomodifiers") != null ||
         //     SpecialSettings.flagOrError("mdrk.modifiers.disabled")?.value?.isEmpty() == true)

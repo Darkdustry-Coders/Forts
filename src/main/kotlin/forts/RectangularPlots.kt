@@ -211,6 +211,9 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
             val plotX = (x - startX) / jX + dx
             val plotY = (y - startY) / jY + dy
 
+            if (plotX !in 0..<plotsX) return false
+            if (plotY !in 0..<plotsY) return false
+
             if (dx == 0 && dy == 0) {
                 if (!states(plotX, plotY).placeable()) return false
             } else if (states(plotX, plotY).placed() && teams(plotX, plotY) != team) return false

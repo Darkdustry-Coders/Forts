@@ -7,7 +7,7 @@ notice.modifiers = [cyan]Enabled modifier{if {modifiers.len} != 1 then s}:
 
 notice.help = [scarlet]Destroy the enemy fort!
             =
-            = [accent]Build[][white]  to expand your base.
+            = [accent]Build[][white] {icon} to expand your base.
             = If there are too few buildings
             = left on a platform, it will
             = [cyan]collapse[].
@@ -45,3 +45,6 @@ resourceflood.desc = Resources are gained over time.
 
 unstable.name = Unstable
 unstable.desc = Blocks and units explode on destruction.
+
+copper.name = Copper
+copper.desc = All items are replaced with copper.

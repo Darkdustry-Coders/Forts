@@ -34,6 +34,8 @@ import mindustry.Vars
 import mindustry.ai.types.CommandAI
 import mindustry.content.Blocks
 import mindustry.content.Fx
+import mindustry.content.Items
+import mindustry.content.Liquids
 import mindustry.content.StatusEffects
 import mindustry.game.EventType
 import mindustry.game.Team
@@ -258,8 +260,6 @@ class Main: Plugin() {
     private val helpLabelsPlayerTimers = ObjectMap<Player, Cancel>()
 
     private var loading = true
-    private val blockDestroyLock = IntMap<IntSeq>()
-    private var blockKilledRecursionLock = false
 
     // Otherwise this crashes
     private var builtInContentPatch: String = ""
@@ -267,6 +267,18 @@ class Main: Plugin() {
     private fun epochMillis(): Int {
         if (epoch == 0L) epoch = Time.millis()
         return (Time.millis() - epoch).toInt()
+    }
+
+    private fun fillBuild(build: Building) {
+        if (build.block == Blocks.siliconCrucible) { if (build.items != null) build.items.set(Items.coal, Blocks.siliconCrucible.itemCapacity) }
+        else if (build.block == Blocks.siliconSmelter) { if (build.items != null) build.items.set(Items.coal, Blocks.siliconSmelter.itemCapacity) }
+        else if (build.block == Blocks.multiPress) { if (build.items != null) build.items.set(Items.coal, Blocks.multiPress.itemCapacity) }
+        else if (build.block == Blocks.plastaniumCompressor) { if (build.liquids != null) build.liquids.set(Liquids.oil, Blocks.plastaniumCompressor.liquidCapacity) }
+        else if (build.block == Blocks.shockwaveTower) { if (build.liquids != null) build.liquids.set(Liquids.cyanogen, Blocks.shockwaveTower.liquidCapacity) }
+        else if (build.block == Blocks.shipAssembler) { if (build.liquids != null) build.liquids.set(Liquids.cyanogen, Blocks.shipAssembler.liquidCapacity) }
+        else if (build.block == Blocks.tankAssembler) { if (build.liquids != null) build.liquids.set(Liquids.cyanogen, Blocks.tankAssembler.liquidCapacity) }
+        else if (build.block == Blocks.mechAssembler) { if (build.liquids != null) build.liquids.set(Liquids.cyanogen, Blocks.mechAssembler.liquidCapacity) }
+        else if (build.block == Blocks.unitRepairTower) { if (build.liquids != null) build.liquids.set(Liquids.ozone, Blocks.unitRepairTower.liquidCapacity) }
     }
 
     override fun init() {
@@ -298,7 +310,6 @@ class Main: Plugin() {
             neoplasiaLastAt.clear()
             epoch = 0L
             Vars.state.rules.waveTeam = Team.derelict
-            blockDestroyLock.clear()
 
             mainCores.clear()
             helpLabels.clear()
@@ -309,7 +320,9 @@ class Main: Plugin() {
                 mainCores.put(team.id, core)
                 val label = UnsyncLabel()
                 label.textGen = { player ->
-                    Tl.fmt(player).done("{forts.notice.help}")
+                    Tl.fmt(player)
+                        .apply { FortsRules.now.expansionBlock.emoji()?.let { put("icon", it) } }
+                        .done("{forts.notice.help}")
                 }
                 label.x = core.x
                 label.y = core.y
@@ -320,7 +333,7 @@ class Main: Plugin() {
 
             val color = Color()
             var part = 0
-            interval(0.02f, lifetime = Lifetime.Round) {
+            interval(0.07f, lifetime = Lifetime.Round) {
                 part = (part + 1) % 32
                 val angle = Mathf.PI2 / 32 * part
                 val dx = cos(angle) * Vars.tilesize * 3
@@ -336,13 +349,16 @@ class Main: Plugin() {
                     Call.effect(Fx.colorTrail, core.x - dx, core.y - dy, 2f, color)
                 }
             }
+            Lifetime.Round.alsoCancel(Cancel {
+                Log.info("Next round!")
+            })
 
             loading = false
         }
         on<EventType.PlayerConnectionConfirmed> {
             helpLabelsPlayerTimers[it.player]?.cancel()
             helpLabels.values().forEach { label -> label.syncFor(it.player) }
-            helpLabelsPlayerTimers.put(it.player, timer(30f) {
+            helpLabelsPlayerTimers.put(it.player, timer(120f) {
                 helpLabels.values().forEach { label -> label.removeFor(it.player) }
             })
         }
@@ -477,6 +493,9 @@ class Main: Plugin() {
 
                     tile.setNet(Blocks.air)
                 }
+                else -> Core.app.run {
+                    if (it.tile.build != null) fillBuild(it.tile.build)
+                }
             }
         }
 
@@ -556,20 +575,9 @@ class Main: Plugin() {
             } else true
         }
 
-        // UnitTypes.poly.health = 90f
-        // UnitTypes.flare.health = 150f
-
-        // (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.metaglass).splashDamage = 65f
-        // (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.blastCompound).splashDamage = 100f
-        // (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.plastanium).splashDamage = 95f
-        // (Blocks.cyclone as ItemTurret).ammoTypes.get(Items.surgeAlloy).splashDamage = 125f
-
-        // val titanAmmo = (Blocks.titan as ItemTurret).ammoTypes.get(Items.thorium)
-        // titanAmmo.damage = 200f
-        // titanAmmo.splashDamage = 800f
-        // titanAmmo.splashDamagePierce = true
-        // titanAmmo.splashDamageRadius = 80f
-        // titanAmmo.buildingDamageMultiplier = 0.02f
+        interval(1f) {
+            Groups.build.each(::fillBuild)
+        }
     }
 
     override fun registerServerCommands(handler: CommandHandler) {

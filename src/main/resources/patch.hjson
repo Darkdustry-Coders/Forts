@@ -54,6 +54,7 @@ block.multi-press.consumes: {
     remove: items
     items: [
         silicon/4
+        coal/4
     ]
 }
 block.phase-heater.consumes: {
