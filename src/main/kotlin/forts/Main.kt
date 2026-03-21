@@ -349,9 +349,6 @@ class Main: Plugin() {
                     Call.effect(Fx.colorTrail, core.x - dx, core.y - dy, 2f, color)
                 }
             }
-            Lifetime.Round.alsoCancel(Cancel {
-                Log.info("Next round!")
-            })
 
             loading = false
         }
