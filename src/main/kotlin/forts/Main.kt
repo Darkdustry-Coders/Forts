@@ -574,6 +574,7 @@ class Main: Plugin() {
                 for (i in 0..<activeTeams.size) {
                     val team = Team.all[activeTeams[i].toUByte().toInt()]
                     team.core()?.let { core ->
+                        if (core.items[item] > 50) return@let
                         core.items[item] = min(core.items[item] + 10, max)
                     }
                 }
