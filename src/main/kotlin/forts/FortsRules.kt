@@ -1,9 +1,15 @@
 package forts
 
+import arc.struct.Bits
 import mindurka.api.RulesContext
 import mindurka.api.SpecialSettings
+import mindurka.util.keyHasHeadByte
+import mindurka.util.keyHeadByte
 import mindustry.Vars
 import mindustry.content.Blocks
+import mindustry.content.Items
+import mindustry.game.Team
+import mindustry.type.Item
 
 class FortsRules(rc: RulesContext) {
     companion object {
@@ -15,6 +21,13 @@ class FortsRules(rc: RulesContext) {
         val ENABLE_VNW = "$PREFIX.enable_vnw"
         @JvmField
         val EXPANSION_BLOCK = "$PREFIX.expansion_block"
+        @JvmField
+        val MIN_HEALTH = "$PREFIX.min_health"
+
+        @JvmField
+        val APPLY_DAMAGE_EFFECTS_HEAD = "$PREFIX.apply_damage_effects."
+        @JvmField
+        val PASSIVE_ITEMS_HEAD = "$PREFIX.passive_items."
 
         @JvmField
         val THOR_PREFIX = "$PREFIX.thor"
@@ -75,6 +88,7 @@ class FortsRules(rc: RulesContext) {
     var enable1va = rc.r(ENABLE_1VA, true)
     var enableVnw = rc.r(ENABLE_VNW, false)
     var expansionBlock = rc.r(EXPANSION_BLOCK, Blocks.impulsePump)
+    var minHealth = rc.r(MIN_HEALTH, 450f)
 
     var thorEnabled = rc.r(THOR_ENABLED, true)
     var thorDelay = rc.r(THOR_DELAY, 0.5f)
@@ -100,8 +114,27 @@ class FortsRules(rc: RulesContext) {
     var neoplasiaDamage = rc.r(NEOPLASIA_DAMAGE, 750f)
     var neoplasiaBlock = rc.r(NEOPLASIA_BLOCK, Blocks.neoplasiaReactor).let { block -> if (block.rotate) block else Blocks.neoplasiaReactor }
 
+    private val applyDamageEffects = Bits(256)
+    fun applyDamageEffects(team: Team): Boolean = applyDamageEffects[team.id]
+    fun applyDamageEffects(team: Team, enabled: Boolean) { applyDamageEffects[team.id] = enabled }
+
+    private val passiveItems = Array(Vars.content.items().size) { rc.r(PASSIVE_ITEMS_HEAD+Vars.content.items()[it],
+        if (it == Items.copper.id.toInt() || it == Items.lead.id.toInt()
+            || it == Items.silicon.id.toInt() || it == Items.graphite.id.toInt()) 50 else 0) }
+    fun passiveItems(item: Item): Int = passiveItems[item.id.toInt()]
+    fun passiveItems(item: Item, value: Int) { passiveItems[item.id.toInt()] = value }
+
     val plots: Plots = when (rc.r(PLOT_PREFIX, "square")) {
         "rect" -> RectangularPlots(rc, RectangularPlots.Shape.Rect)
-        else /* square */ -> RectangularPlots(rc, RectangularPlots.Shape.Square)
+        "square" -> RectangularPlots(rc, RectangularPlots.Shape.Square)
+        else -> NoPlots
+    }
+
+    init {
+        applyDamageEffects[0] = 256 // This is so bullshit, but it's so hilarious.
+        for (x in rc.rules.tags) {
+            if (keyHasHeadByte(x.key, APPLY_DAMAGE_EFFECTS_HEAD))
+                applyDamageEffects(Team.all[keyHeadByte(x.key, APPLY_DAMAGE_EFFECTS_HEAD)], x.value == "true")
+        }
     }
 }

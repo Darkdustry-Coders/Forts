@@ -4,6 +4,7 @@ import arc.Core
 import arc.func.Prov
 import arc.graphics.Color
 import arc.math.Mathf
+import arc.struct.ByteSeq
 import arc.struct.IntIntMap
 import arc.struct.IntMap
 import arc.struct.IntSeq
@@ -39,6 +40,7 @@ import mindustry.content.Liquids
 import mindustry.content.StatusEffects
 import mindustry.game.EventType
 import mindustry.game.Team
+import mindustry.game.Teams
 import mindustry.gen.Building
 import mindustry.gen.Call
 import mindustry.gen.Groups
@@ -507,8 +509,10 @@ class Main: Plugin() {
             val team = event.tile.team().id
             mainCores[team]?.let { core ->
                 if (event.tile.build !== core) return@let
-                event.tile.team().cores().each { target ->
-                    if (target.dead) return@each
+                val cores = event.tile.team().cores()
+                while (!cores.isEmpty) {
+                    val target = cores[cores.size - 1]
+                    if (target.dead) continue
                     target.kill()
                     Call.logicExplosion(Team.derelict,
                         target.x, target.y,
@@ -533,6 +537,7 @@ class Main: Plugin() {
         }
 
         fun reevalUnitEffects(unit: Unit) {
+            if (!FortsRules.now.applyDamageEffects(unit.team())) return
             if (unit.spawnedByCore) {
                 if (unit !is PayloadUnit) return
                 if (unit.payloads.size == 0) return
@@ -556,6 +561,23 @@ class Main: Plugin() {
         }
         interval(0.25f) {
             Groups.unit.each(::reevalUnitEffects)
+        }
+        interval(5f) {
+            val activeTeams = ByteSeq()
+            for (team in Team.all) {
+                if (team == Team.derelict) continue
+                if (team.core() != null) activeTeams.add(team.id.toByte())
+            }
+            for (item in Vars.content.items()) {
+                val max = FortsRules.now.passiveItems(item)
+                if (max <= 0) continue
+                for (i in 0..<activeTeams.size) {
+                    val team = Team.all[activeTeams[i].toUByte().toInt()]
+                    team.core()?.let { core ->
+                        core.items[item] = min(core.items[item] + 10, max)
+                    }
+                }
+            }
         }
         on<EventType.PickupEvent> { reevalUnitEffects(it.carrier) }
 

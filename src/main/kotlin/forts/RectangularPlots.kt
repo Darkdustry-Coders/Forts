@@ -6,15 +6,21 @@ import arc.struct.IntMap
 import arc.struct.IntSeq
 import arc.util.Strings
 import arc.util.Log
+import arc.util.serialization.Base64Coder
 import mindurka.api.RulesContext
 import mindurka.util.FormatException
+import mindurka.util.Ops
 import mindurka.util.Schematic
+import mindurka.util.keyHasHeadByte
+import mindurka.util.keyHeadByte
 import mindustry.Vars
 import mindustry.content.Blocks
 import mindustry.content.Fx
 import mindustry.game.Team
 import mindustry.gen.Call
 import mindustry.world.Block
+import net.jpountz.lz4.LZ4Factory
+import java.util.Base64
 import kotlin.run
 
 class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
@@ -31,27 +37,12 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
         const val MAX_SIZE = 16
 
         val SCHEME_OPTIONS = Schematic.Options().skipAir().skipEmpty()
+        val SCHEME_OPTIONS_LOAD = Schematic.Options().skipAir().skipEmpty().noNet()
         val SCHEME_CREATE_OPTIONS = Schematic.Options().skipBuildings()
 
         private val SCHEMATIC_HEAD = "$PREFIX.schematic."
-        private val SCHEMATIC_HEAD_END = SCHEMATIC_HEAD.length
-        fun keyIsSchematic(key: String): Boolean {
-            if (!key.startsWith(SCHEMATIC_HEAD)) return false
-            // TODO: Port to MindurkaCompat. MindurkaCompat implementation sucks.
-            return when (key.length - SCHEMATIC_HEAD.length) {
-                1 -> ('1'..'9').contains(key[SCHEMATIC_HEAD_END])
-                2 -> ('1'..'9').contains(key[SCHEMATIC_HEAD_END]) && ('0'..'9').contains(key[SCHEMATIC_HEAD_END + 1])
-                3 -> ('1'..'2').contains(key[SCHEMATIC_HEAD_END]) && (
-                    ('0'..'4').contains(key[SCHEMATIC_HEAD_END + 1]) && ('0'..'9').contains(key[SCHEMATIC_HEAD_END + 2]) ||
-                    key[SCHEMATIC_HEAD_END + 1] == '5' && ('0'..'4').contains(key[SCHEMATIC_HEAD_END + 2])
-                )
-                else -> false
-            }
-        }
-        fun keySchematicTeam(key: String): Team? {
-            if (!keyIsSchematic(key)) return null
-            return Team.all[Strings.parseInt(key, 10, 0, SCHEMATIC_HEAD_END, key.length)]
-        }
+        fun keyIsSchematic(key: String): Boolean = keyHasHeadByte(key, SCHEMATIC_HEAD)
+        fun keySchematicTeam(key: String): Team? = if (keyIsSchematic(key)) Team.all[keyHeadByte(key, SCHEMATIC_HEAD)] else null
     }
 
     enum class Shape {
@@ -90,11 +81,10 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
     init { run {
         for (key in rc.rules.tags.keys()) {
             val team = keySchematicTeam(key) ?: continue
-            Log.info("Found team key: $key")
             try {
                 val scheme = Schematic.of(rc.rules.tags.get(key))
                 if (scheme.width != width + wallsSize * 2 || scheme.height != height + wallsSize * 2) {
-                    Log.info("Scheme's FUCKED (${scheme.width} vs ${width + wallsSize * 2}, ${scheme.height} vs ${height + wallsSize * 2})")
+                    Log.err("Scheme's FUCKED (${scheme.width} vs ${width + wallsSize * 2}, ${scheme.height} vs ${height + wallsSize * 2})")
                     continue
                 }
                 plotSchematics.put(team.id, scheme)
@@ -105,61 +95,97 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
         }
 
         val statesS = rc.r(STATES, "")
-        if (statesS.length != states.size * 3) {
-            Log.err("Invalid states length! (${statesS.length} vs ${states.size * 3})")
-            return@run
-        }
 
-        var chars = statesS.chars().iterator()
-        for (ignored /* IDEA shut up */ in 0..<plotsX * plotsY) {
-            var ch = chars.nextInt()
-            if (ch < 'a'.code) {
-                Log.err("Invalid plot kind! ($ch)")
+        if (statesS.startsWith("x0")) {
+            try {
+                val data = LZ4Factory.fastestInstance().safeDecompressor().decompress(Base64.getDecoder().decode(statesS.substring(2)), 1024 * 64)
+                var ptr = 0
+
+                for (i in 0..<states.size) {
+                    val ordinal = Ops.bitAnd(data[ptr++].toInt(), 0xff)
+                    if (ordinal >= PlotStateTag.entries.size) {
+                        Log.err("Invalid plot state $ordinal")
+                        states.fill(0)
+                        teams.fill(0)
+                        return@run
+                    }
+                    states[i] = ordinal.toByte()
+
+                    if (PlotStateTag.entries[ordinal].placed()) teams[i] = data[ptr++]
+                }
+
+                if (ptr != data.size) {
+                    Log.err("Not all data has been consumed!")
+                    states.fill(0)
+                    teams.fill(0)
+                    return@run
+                }
+            } catch (e: IllegalArgumentException) {
+                Log.err("Invalid plot states format!", e)
+                states.fill(0)
+                teams.fill(0)
+            } catch (e: IndexOutOfBoundsException) {
+                Log.err("Not enough data!", e)
+                states.fill(0)
+                teams.fill(0)
+            }
+        } else {
+            if (statesS.length != states.size * 3) {
+                Log.err("Invalid states length! (${statesS.length} vs ${states.size * 3})")
                 return@run
             }
-            if (ch - 'a'.code >= PlotStateTag.entries.size) {
-                Log.err("Invalid plot kind! ($ch)")
-                return@run
-            }
 
-            ch = chars.nextInt()
-            if (ch !in '0'.code..'9'.code && ch !in 'a'.code..'f'.code) {
-                Log.err("Invalid team! ([0] = $ch)")
-                return@run
-            }
-            ch = chars.nextInt()
-            if (ch !in '0'.code..'9'.code && ch !in 'a'.code..'f'.code) {
-                Log.err("Invalid team! ([1] = $ch)")
-                return@run
-            }
-        }
-        chars = statesS.chars().iterator()
-        for (cursor in 0..<plotsX * plotsY) {
-            states[cursor] = (chars.nextInt() - 'a'.code).toByte()
+            var chars = statesS.chars().iterator()
+            for (ignored /* IDEA shut up */ in 0..<plotsX * plotsY) {
+                var ch = chars.nextInt()
+                if (ch < 'a'.code) {
+                    Log.err("Invalid plot kind! ($ch)")
+                    return@run
+                }
+                if (ch - 'a'.code >= PlotStateTag.entries.size) {
+                    Log.err("Invalid plot kind! ($ch)")
+                    return@run
+                }
 
-            val a = chars.nextInt()
-            val b = chars.nextInt()
+                ch = chars.nextInt()
+                if (ch !in '0'.code..'9'.code && ch !in 'a'.code..'f'.code) {
+                    Log.err("Invalid team! ([0] = $ch)")
+                    return@run
+                }
+                ch = chars.nextInt()
+                if (ch !in '0'.code..'9'.code && ch !in 'a'.code..'f'.code) {
+                    Log.err("Invalid team! ([1] = $ch)")
+                    return@run
+                }
+            }
+            chars = statesS.chars().iterator()
+            for (cursor in 0..<plotsX * plotsY) {
+                states[cursor] = (chars.nextInt() - 'a'.code).toByte()
 
-            teams[cursor] = ((if (a >= 'a'.code) a + 10 - 'a'.code else a - '0'.code) * 16
-                + (if (b >= 'a'.code) b + 10 - 'a'.code else b - '0'.code)).toByte()
+                val a = chars.nextInt()
+                val b = chars.nextInt()
+
+                teams[cursor] = ((if (a >= 'a'.code) a + 10 - 'a'.code else a - '0'.code) * 16
+                    + (if (b >= 'a'.code) b + 10 - 'a'.code else b - '0'.code)).toByte()
+            }
         }
 
         for (x in 0..<plotsX) for (y in 0..<plotsY) {
-            if (!states(x, y).placed()) continue
+            if (!states(x, y).startPlaceSchematic()) continue
             val team = teams(x, y)
             val schematic = plotSchematics[team.id] ?: continue
-            actualPlacePlot(x, y, team, schematic)
+            actualPlacePlot(x, y, team, schematic, SCHEME_OPTIONS_LOAD)
         }
     } }
 
-    fun actualPlacePlot(plotX: Int, plotY: Int, team: Team, schematic: Schematic) {
+    fun actualPlacePlot(plotX: Int, plotY: Int, team: Team, schematic: Schematic, pasteOptions: Schematic.Options = SCHEME_OPTIONS) {
         run {
             val x = startX + plotX * jX
             val y = startY + plotY * jY
             val i = plotX + plotY * plotsX
             if (!centerParts.containsKey(i)) {
                 centerParts.put(i, Schematic.of(Vars.world.tiles, x, y, width, height, SCHEME_CREATE_OPTIONS))
-                schematic.paste(wallsSize, wallsSize, width, height, Vars.world.tiles, x, y, SCHEME_OPTIONS)
+                schematic.paste(wallsSize, wallsSize, width, height, Vars.world.tiles, x, y, pasteOptions)
             }
         }
 
@@ -169,7 +195,7 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
             val i = (plotX + dx) + (plotY + dy) * (plotsX + 1)
             if (!intersectionParts.containsKey(i)) {
                 intersectionParts.put(i, Schematic.of(Vars.world.tiles, x, y, wallsSize, wallsSize, SCHEME_CREATE_OPTIONS))
-                schematic.paste(dx * jX, dy * jY, wallsSize, wallsSize, Vars.world.tiles, x, y, SCHEME_OPTIONS)
+                schematic.paste(dx * jX, dy * jY, wallsSize, wallsSize, Vars.world.tiles, x, y, pasteOptions)
             }
         }
 
@@ -196,9 +222,7 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
             }
         }
 
-        for (other in Team.all) {
-            Main.filterTeamPlans(team)
-        }
+        Main.filterTeamPlans(team)
     }
 
     private fun _placeExpansionBlock(x: Int, y: Int, team: Team, delete: Runnable): Boolean {
@@ -280,7 +304,7 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
             val y = plotY * jY + startY - wallsSize + dy
             val tile = Vars.world.tile(x, y) ?: continue
             score += tile.build?.health ?: 0f
-            if (score >= 450) return
+            if (score >= FortsRules.now.minHealth) return
         }
 
         val smokeColor = Color(); smokeColor.rgba8888(0x0c0c0c7a)
