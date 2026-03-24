@@ -145,6 +145,8 @@ data class GameStage(
 }
 
 class Main: Plugin() {
+    private var destroyCoreLock = false
+
     companion object {
         private val carbideWallsCatapult = ObjectMap<Building, Seq<Building>>();
         @JvmStatic
@@ -508,10 +510,12 @@ class Main: Plugin() {
 
             val team = event.tile.team().id
             mainCores[team]?.let { core ->
+                if (destroyCoreLock) return@let
                 if (event.tile.build !== core) return@let
-                val cores = event.tile.team().cores()
+                destroyCoreLock = true
+                val cores = event.tile.team().cores().copy()
                 while (!cores.isEmpty) {
-                    val target = cores[cores.size - 1]
+                    val target = cores.pop()
                     if (target.dead) continue
                     target.kill()
                     Call.logicExplosion(Team.derelict,
@@ -521,6 +525,7 @@ class Main: Plugin() {
                 }
                 mainCores.remove(team)
                 helpLabels.remove(team)?.remove()
+                destroyCoreLock = false
             }
         }
         on<EventType.BlockBuildBeginEvent> { event ->
