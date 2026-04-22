@@ -31,9 +31,10 @@ class UnsyncLabel: WorldLabel() {
     }
 
     override fun write(write: Writes) {
-        write.s(0);
+        write.s(1);
         write.b(this.flags.toInt());
         write.f(this.fontSize);
+        TypeIO.writePosEntity(write, parent);
         TypeIO.writeString(write, textGen?.let { it[currentPlayer!!] } ?: this.text);
         currentPlayer = null
         write.f(this.x);
@@ -44,6 +45,7 @@ class UnsyncLabel: WorldLabel() {
     override fun writeSync(write: Writes) {
         write.b(this.flags.toInt());
         write.f(this.fontSize);
+        TypeIO.writePosEntity(write, parent);
         TypeIO.writeString(write, textGen?.let { it[currentPlayer!!] } ?: this.text);
         currentPlayer = null
         write.f(this.x);

@@ -1,5 +1,6 @@
 package forts
 
+import arc.Core
 import arc.graphics.Color
 import arc.math.Mathf
 import arc.struct.IntMap
@@ -88,7 +89,7 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
                     continue
                 }
                 plotSchematics.put(team.id, scheme)
-            } catch (ignored: FormatException) {
+            } catch (_: FormatException) {
                 plotSchematics.clear()
                 return@run
             }
@@ -101,7 +102,7 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
                 val data = LZ4Factory.fastestInstance().safeDecompressor().decompress(Base64.getDecoder().decode(statesS.substring(2)), 1024 * 64)
                 var ptr = 0
 
-                for (i in 0..<states.size) {
+                for (i in states.indices) {
                     val ordinal = Ops.bitAnd(data[ptr++].toInt(), 0xff)
                     if (ordinal >= PlotStateTag.entries.size) {
                         Log.err("Invalid plot state $ordinal")
@@ -228,15 +229,18 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
     private fun _placeExpansionBlock(x: Int, y: Int, team: Team, delete: Runnable): Boolean {
         val scheme = plotSchematics[team.id] ?: return false
 
-        val x = if (x < startX) startX else if (x > startX + jX * plotsX) startX + jX * plotsX else x
-        val y = if (y < startY) startY else if (y > startY + jY * plotsY) startY + jY * plotsY else y
+        val plotX = (x - startX) / jX
+        val plotY = (y - startY) / jY
+
+        if (plotX !in 0..<plotsX) return false
+        if (plotY !in 0..<plotsY) return false
 
         for (dx in -1..1) for (dy in -1..1) {
             val plotX = (x - startX) / jX + dx
             val plotY = (y - startY) / jY + dy
 
-            if (plotX !in 0..<plotsX) return false
-            if (plotY !in 0..<plotsY) return false
+            if (plotX !in 0..<plotsX) continue
+            if (plotY !in 0..<plotsY) continue
 
             if (dx == 0 && dy == 0) {
                 if (!states(plotX, plotY).placeable()) return false
@@ -245,8 +249,6 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
 
         delete.run()
         actualPlacePlot((x - startX) / jX, (y - startY) / jY, team, scheme)
-        val plotX = (x - startX) / jX
-        val plotY = (y - startY) / jY
         teams(plotX, plotY, team)
         states(plotX, plotY, PlotStateTag.Placed)
 
@@ -406,10 +408,12 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
         val inPlotX = x - (plotX * jX + startX)
         val inPlotY = y - (plotY * jY + startY)
 
-        _handleBlockBreak(plotX, plotY)
-        if (inPlotX >= width) _handleBlockBreak(plotX + 1, plotY)
-        if (inPlotY >= height) _handleBlockBreak(plotX, plotY + 1)
-        if (inPlotX >= width && inPlotY >= height) _handleBlockBreak(plotX + 1, plotY + 1)
+        Core.app.post {
+            _handleBlockBreak(plotX, plotY)
+            if (inPlotX >= width) _handleBlockBreak(plotX + 1, plotY)
+            if (inPlotY >= height) _handleBlockBreak(plotX, plotY + 1)
+            if (inPlotX >= width && inPlotY >= height) _handleBlockBreak(plotX + 1, plotY + 1)
+        }
     }
     override fun handleBlockBreak(x: Int, y: Int, checkTeams: IntSeq) {
         handleBlockBreakImpl(x, y) { cb ->

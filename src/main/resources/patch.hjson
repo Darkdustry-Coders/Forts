@@ -18,6 +18,14 @@ block.titan.ammoTypes.thorium: {
 block.oxidation-chamber.canOverdrive: true
 block.thorium-reactor.health: 10
 block.neoplasia-reactor.health: 10
+block.naval-factory: {
+    requirements: [lead/250, silicon/500, metaglass/460]
+    payloadSpeed: 0.3
+    plans: {
+        0.time: 5400
+        1.time: 4500
+    }
+}
 block.overdrive-projector: {
     consumes: {
         remove: all
@@ -36,11 +44,12 @@ block.overdrive-projector: {
     liquidCapacity: 10
     requirements: [lead/150, titanium/300, thorium/600, silicon/400, plastanium/300, fissile-matter/100]
     buildTime: 1800
+    range: 140
 }
 block.malign: {
     maxHeatEfficiency: 6
     heatRequirement: 24
-    reload: 10
+    reload: 25
 }
 block.phase-synthesizer.outputItem.amount: 2
 block.surge-crucible.outputItem.amount: 3
@@ -74,3 +83,21 @@ block.electric-heater.requirements: [
     beryllium/30,
     tungsten/30,
 ]
+unitcommand.loadBlocks: {
+    resetTarget: true
+    snapToBuilding: true
+    exactArrival: true
+    refreshOnSelect: true
+}
+unit.quell.payloadCapacity: 1024.0
+unit.disrupt.payloadCapacity: 256.0
+unit.disrupt-missile.weapons.0.bullet.suppressionRange: 112
+unit.retusa.weapons: {
+    0.repairSpeed: 0.4
+    1.bullet.damage: 4
+    2.bullet.damage: 4
+    3.bullet: {
+        splashDamage: 8
+        splashDamageRadius: 16
+    }
+}

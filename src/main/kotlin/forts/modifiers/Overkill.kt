@@ -3,6 +3,7 @@ package forts.modifiers
 import arc.Core
 import forts.Modifier
 import mindurka.api.on
+import mindustry.Vars
 import mindustry.game.EventType
 import mindustry.game.Team
 import mindustry.world.blocks.ConstructBlock
@@ -22,7 +23,13 @@ class Overkill: Modifier() {
             val block = it.tile.build.block
             val rot = it.tile.build.rotation
 
-            Core.app.post { it.tile.setNet(block, Team.derelict, rot) }
+            val hpdiff = Vars.state.rules.teams[Team.derelict].blockHealthMultiplier / Vars.state.rules.teams[it.tile.team()].blockHealthMultiplier
+
+            Core.app.post {
+                it.tile.setNet(block, Team.derelict, rot)
+                it.tile.build.maxHealth *= hpdiff
+                it.tile.build.health *= hpdiff
+            }
         }
     }
 }

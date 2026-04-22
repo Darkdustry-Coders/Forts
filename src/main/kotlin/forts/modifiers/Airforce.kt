@@ -1,6 +1,7 @@
 package forts.modifiers
 
 import arc.Core
+import arc.util.Log
 import forts.Modifier
 import mindurka.api.BuildEvent
 import mindurka.api.BuildEventPost
@@ -17,6 +18,7 @@ import mindustry.type.Category
 import mindustry.type.UnitType
 import mindustry.world.Tile
 import mindustry.world.blocks.payloads.BuildPayload
+import kotlin.math.min
 
 class Airforce: Modifier() {
     override fun chance() = 0.1f
@@ -52,9 +54,11 @@ class Airforce: Modifier() {
             val unit = uty.spawn(tile.build.team(), tile.drawx(), tile.drawy())
             unit.maxHealth = tile.block().health.toFloat() *
                 Vars.state.rules.blockHealthMultiplier *
-                Vars.state.rules.teams.get(tile.team()).blockHealthMultiplier
-            unit.health = event.health()
-            if (unit.health < 2f) unit.health = 2f
+                Vars.state.rules.teams[tile.team()].blockHealthMultiplier
+            unit.health = event.health() /
+                ((Vars.state.rules.unitHealthMultiplier + 1) / 2) /
+                ((Vars.state.rules.teams[tile.team()].unitHealthMultiplier + 1) / 2)
+            if (unit.health < 2f) unit.health = min(10f, unit.maxHealth)
             Vars.state.rules.unitCap = limit
             Vars.state.rules.unitCapVariable = dyn
             if (unit == null) {
@@ -62,8 +66,8 @@ class Airforce: Modifier() {
                 return@post
             }
             assert(unit is PayloadUnit)
-            unit.apply(StatusEffects.disarmed, 999999f)
-            unit.apply(StatusEffects.invincible, 20f)
+            unit.apply(StatusEffects.disarmed, Float.POSITIVE_INFINITY)
+            unit.apply(StatusEffects.invincible, 60f)
             (unit as PayloadUnit).addPayload(BuildPayload(tile.build))
             tile.setNet(Blocks.air)
         }

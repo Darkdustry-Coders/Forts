@@ -31,6 +31,8 @@ import mindurka.coreplugin.CorePlugin
 import mindurka.util.Async
 import mindurka.util.ModifyWorld
 import mindurka.util.Ops
+import mindurka.util.canActuallyPlaceOn
+import mindurka.util.prefixed
 import mindustry.Vars
 import mindustry.ai.types.CommandAI
 import mindustry.content.Blocks
@@ -38,6 +40,7 @@ import mindustry.content.Fx
 import mindustry.content.Items
 import mindustry.content.Liquids
 import mindustry.content.StatusEffects
+import mindustry.content.UnitTypes
 import mindustry.game.EventType
 import mindustry.game.Team
 import mindustry.game.Teams
@@ -161,10 +164,10 @@ class Main: Plugin() {
             carbideWallsCatapult.put(deconstructor, buildings)
             val victims: Seq<Building> = buildings
 
-            Core.app.run {
+            Core.app.post {
                 carbideWallsCatapult.remove(deconstructor)
                 if (deconstructor.dead) {
-                    return@run
+                    return@post
                 }
 
                 those@for (victim in victims) {
@@ -193,7 +196,7 @@ class Main: Plugin() {
 
                         for (ddx in 0..1) for (ddy in 0..1) {
                             val tile = Vars.world.tile(x + ddx, y + ddy)
-                            if (tile.block() !== Blocks.air) {
+                            if (!build.block.canActuallyPlaceOn(tile, build.team, 0)) {
                                 continue@a
                             }
                         }
@@ -212,7 +215,7 @@ class Main: Plugin() {
                             Team.derelict, (tile.x * Vars.tilesize).toFloat(), (tile.y * Vars.tilesize).toFloat(), 80f, 4000f,
                             true, true, false, true
                         )
-                        return@run
+                        return@post
                     }
 
                     counter = Mathf.random(counter - 1)
@@ -225,7 +228,7 @@ class Main: Plugin() {
 
                         for (ddx in 0..1) for (ddy in 0..1) {
                             val tile = Vars.world.tile(x + ddx, y + ddy)
-                            if (tile.block() !== Blocks.air) {
+                            if (!build.block.canActuallyPlaceOn(tile, build.team, 0)) {
                                 continue@a
                             }
                         }
@@ -234,8 +237,8 @@ class Main: Plugin() {
                             val tile = Vars.world.tile(x, y)
                             tile.setBlock(build.block,
                                 Team.derelict,
-                                build.rotation,
-                                Prov { build })
+                                build.rotation
+                            ) { build }
                             ModifyWorld.netBlock(tile, build.block, build.team, build.rotation)
                             ModifyWorld.syncBuild(victim)
                             Call.effect(Fx.unitCapKill, build.getX(), build.getY(), 0f, Color.red);
@@ -286,9 +289,10 @@ class Main: Plugin() {
     }
 
     override fun init() {
-        CorePlugin.init(javaClass)
+        val loader = javaClass.classLoader.prefixed("forts")
+        CorePlugin.init(loader)
 
-        builtInContentPatch = Streams.copyString(javaClass.classLoader.getResourceAsStream("patch.hjson"))
+        builtInContentPatch = Streams.copyString(loader.getResourceAsStream("patch.hjson"))
 
         initModifiers()
 
@@ -338,6 +342,7 @@ class Main: Plugin() {
             val color = Color()
             var part = 0
             interval(0.07f, lifetime = Lifetime.Round) {
+                if (Vars.state.isPaused) return@interval
                 part = (part + 1) % 32
                 val angle = Mathf.PI2 / 32 * part
                 val dx = cos(angle) * Vars.tilesize * 3
@@ -494,7 +499,7 @@ class Main: Plugin() {
 
                     tile.setNet(Blocks.air)
                 }
-                else -> Core.app.run {
+                else -> Core.app.post {
                     if (it.tile.build != null) fillBuild(it.tile.build)
                 }
             }
@@ -557,7 +562,8 @@ class Main: Plugin() {
                 unit.apply(StatusEffects.overclock, 2f * 60)
                 if (unit.health > 200) unit.health = 190f
             } else {
-                if (unit.type.naval) unit.apply(StatusEffects.boss, 9999f)
+                if (unit.type.vulnerableWithPayloads && (unit !is PayloadUnit || unit.hasPayload())) return
+
                 unit.apply(StatusEffects.shielded, 9999f)
                 unit.apply(StatusEffects.burning, 9999f)
                 if (unit.health > 100) unit.apply(StatusEffects.melting, 9999f)

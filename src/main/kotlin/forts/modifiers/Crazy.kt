@@ -1,5 +1,6 @@
 package forts.modifiers
 
+import arc.func.Boolf
 import forts.Modifier
 import mindustry.world.Tile
 import mindustry.world.Block
@@ -16,6 +17,8 @@ import mindurka.api.on
 import mindustry.content.Blocks
 import mindustry.world.blocks.legacy.LegacyBlock
 
+private val FILTER = Boolf<Block> { it !is ConstructBlock && it !is LegacyBlock && it != Blocks.spawn && it != Blocks.removeOre && it != Blocks.removeWall }
+
 class Crazy: Modifier() {
     val morphMap = IntIntMap()
 
@@ -24,10 +27,9 @@ class Crazy: Modifier() {
 
     override fun start() {
         Vars.state.rules.deconstructRefundMultiplier = 1f
-        val free = Vars.content.blocks()
-            .select { it !is ConstructBlock }
+        val free = Vars.content.blocks().select(FILTER)
         Vars.content.blocks()
-            .each<Block>({ it !is ConstructBlock && it !is LegacyBlock }) {
+            .each<Block>(FILTER) {
                 while (true) {
                     val idx = Mathf.random(0, free.size - 1)
                     val obj = free[idx]
