@@ -22,6 +22,7 @@ import mindurka.api.Cancel
 import mindurka.api.Gamemode
 import mindurka.api.Lifetime
 import mindurka.api.Priority
+import mindurka.api.SpecialSettings
 import mindurka.api.SpecialSettingsLoad
 import mindurka.api.interval
 import mindurka.api.on
@@ -59,6 +60,8 @@ import mindustry.world.Block
 import mindustry.world.Tile
 import mindustry.world.blocks.ConstructBlock
 import mindustry.world.blocks.defense.BaseShield
+import mindustry.world.blocks.defense.turrets.ItemTurret
+import mindustry.world.blocks.defense.turrets.Turret
 import mindustry.world.blocks.environment.Prop
 import mindustry.world.blocks.payloads.BuildPayload
 import mindustry.world.blocks.storage.CoreBlock
@@ -67,6 +70,7 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.nextUp
+import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -313,6 +317,26 @@ class Main: Plugin() {
             loading = true
         }
         on<EventType.PlayEvent>(priority = Priority.Highest) {
+            if (SpecialSettings.currentMap().patch < 7) {
+                Vars.state.rules.bannedUnits.remove(UnitTypes.retusa)
+                Vars.state.rules.bannedBlocks.remove(Blocks.overflowGate)
+                Vars.state.rules.unitPayloadUpdate = true
+                Groups.build.each { // Peak funny condition.
+                    if (it !is ItemTurret.ItemTurretBuild) return@each
+                    if (it.peekAmmo() != null) return@each
+
+                    it.ammo.removeAll { it.type() == null }
+                    if (!it.hasAmmo()) {
+                        val first = (it.block as ItemTurret).ammoTypes.first()
+                        // No joke, this is how Mindustry does this.
+                        @Suppress("UNUSED")
+                        for (i in 0..<round(it.block.itemCapacity * first.value.ammoMultiplier).toInt()) {
+                            it.handleItem(null, first.key)
+                        }
+                    }
+                }
+            }
+
             thorLastAt.clear()
             impactLastAt.clear()
             neoplasiaLastAt.clear()
@@ -364,7 +388,7 @@ class Main: Plugin() {
         on<EventType.PlayerConnectionConfirmed> {
             helpLabelsPlayerTimers[it.player]?.cancel()
             helpLabels.values().forEach { label -> label.syncFor(it.player) }
-            helpLabelsPlayerTimers.put(it.player, timer(120f) {
+            helpLabelsPlayerTimers.put(it.player, timer(180f) {
                 helpLabels.values().forEach { label -> label.removeFor(it.player) }
             })
         }
@@ -383,6 +407,8 @@ class Main: Plugin() {
                     }
                 }
                 FortsRules.now.thorBlock if FortsRules.now.thorEnabled -> Async.run {
+                    if (build.get() == null) return@run
+
                     val now = epochMillis()
                     val lastThorAt = this.thorLastAt.get(team.id, 0)
                     this.thorLastAt.put(team.id, max(now, lastThorAt) + (FortsRules.now.thorCooldown * 1000f).toInt())
@@ -412,6 +438,8 @@ class Main: Plugin() {
                     Call.logicExplosion(team, b.getX(), b.getY(), 16f * rm * Vars.tilesize, 120f * dm, true, true, false, true)
                 }
                 FortsRules.now.impactBlock if FortsRules.now.impactEnabled -> Async.run {
+                    if (build.get() == null) return@run
+
                     val now = epochMillis()
                     val lastImpactAt = this.impactLastAt.get(team.id, 0)
                     this.impactLastAt.put(team.id, max(now, lastImpactAt) + (FortsRules.now.impactCooldown * 1000f).toInt())
@@ -452,6 +480,8 @@ class Main: Plugin() {
                     Call.logicExplosion(Team.derelict, ex, ey, FortsRules.now.impactExplosionRadius, FortsRules.now.impactExplosionDamage, true, true, true, true)
                 }
                 FortsRules.now.neoplasiaBlock if FortsRules.now.neoplasiaEnabled -> Async.run {
+                    if (build.get() == null) return@run
+
                     val now = epochMillis()
                     val lastNeoplasiaAt = this.neoplasiaLastAt.get(team.id, 0)
                     this.neoplasiaLastAt.put(team.id, max(now, lastNeoplasiaAt) + (FortsRules.now.neoplasiaCooldown * 1000f).toInt())

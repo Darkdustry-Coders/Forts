@@ -48,3 +48,6 @@ unstable.desc = Blocks and units explode on destruction.
 
 copper.name = Copper
 copper.desc = All items are replaced with copper.
+
+march.name = March
+march.desc = Blocks placed by players cannot be deconstructed.

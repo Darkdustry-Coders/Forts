@@ -1,13 +1,38 @@
+block.surge-conveyor.speed: 0.1
+block.surge-conveyor: {
+    speed: 0.2
+    itemCapacity: 20
+}
+block.surge-router: {
+    speed: 0.4
+    itemCapacity: 20
+}
 block.scrap-wall.alwaysReplace: true
 block.copper-wall.alwaysReplace: true
-unit.poly.health: 90
-unit.flare.health: 150
+unit.poly.health: 50
+unit.flare.health: 55
+unit.horizon.health: 130
+unit.elude.health: 300
+unit.merui.health: 150
+unit.cleroi.health: 600
+unit.anthicus.health: 1200
+unit.atrax.immunities: []
 block.cyclone.ammoTypes: {
     metaglass.splashDamage: 65
     blast-compound.splashDamage: 100
     plastanium.splashDamage: 95
     surge-alloy.splashDamage: 125
 }
+block.swarmer.ammoTypes: {
+    surge-alloy.damage: 10
+    blast-compound.damage: 12
+    pyratite: {
+        damage: 6
+        splashDamage: 20
+    }
+}
+block.slag-centrifuge.outputLiquids.0.amount: 0.017166667
+block.segment.requirements: [titanium/80, silicon/130, phase-fabric/6]
 block.titan.ammoTypes.thorium: {
     buildingDamageMultiplier: 0.01
     damage: 200
@@ -72,24 +97,31 @@ block.phase-heater.consumes: {
 block.scrap-wall-huge.health: 4100
 block.scrap-wall-gigantic.health: 6700
 block.slag-heater: {
-    heatOutput: 28
+    heatOutput: 20
     requirements: [
         tungsten/50,
         oxide/40,
         carbide/5,
     ]
 }
+block.scatter.ammoTypes: {
+    scrap: -
+    lead: -
+    metaglass: {
+        reloadMultiplier: 1
+    }
+}
 block.electric-heater.requirements: [
     beryllium/30,
     tungsten/30,
 ]
+block.shield-projector.canPickup: false
+block.large-shield-projector.canPickup: false
 unitcommand.loadBlocks: {
-    resetTarget: true
     snapToBuilding: true
-    exactArrival: true
-    refreshOnSelect: true
+    exactArrival: false
 }
-unit.quell.payloadCapacity: 1024.0
+unit.quell.payloadCapacity: 256.0
 unit.disrupt.payloadCapacity: 256.0
 unit.disrupt-missile.weapons.0.bullet.suppressionRange: 112
 unit.retusa.weapons: {
@@ -100,4 +132,83 @@ unit.retusa.weapons: {
         splashDamage: 8
         splashDamageRadius: 16
     }
+}
+
+# Crazy tests
+
+block.foreshadow: {
+    ammoTypes: {
+        surge-alloy: {
+            type: PointBulletType
+            damage: 750
+            buildingDamageMultiplier: 0.12
+            despawnEffect: instTrail
+            hitEffect: instTrail
+            shootEffect: instShoot
+            trailEffect: instTrail
+            fragBullet: {
+                type: MultiBulletType
+                bullets: [
+                    {
+                        type: PointBulletType
+                        trailSpacing: 1
+                        hitEffect: instTrail
+                        shootEffect: instTrail
+                        trailEffect: instTrail
+                        hitColor: ffe4a2ff
+                        collidesTiles: false
+                        despawnEffect: instTrail
+                        buildingDamageMultiplier: 0
+                        damage: 4000.0
+                        maxDamageFraction: 0.02
+                        status: disarmed
+                        statusDuration: 120,
+                        lifetime: 25
+                    }
+                ]
+            }
+            status: unmoving
+            statusDuration: 30
+        }
+    }
+    predictTarget: false
+}
+block.ripple: {
+    ammoTypes: {
+        silicon: -
+        pyratite: {
+            damage: 20
+            splashDamage: 20
+        }
+        blast-compound: {
+            splashDamage: 140,
+            reloadMultiplier:0.33
+            damage:80
+            speed: 1.5
+            fragBullets: 5
+            shieldDamageMultiplier: 0.1
+            armorMultiplier: 2
+        }
+        graphite: {
+            shieldDamageMultiplier: 0.5
+        }
+        plastanium: {
+            shieldDamageMultiplier: 2.5
+            fragBullets: 4
+            splashDamage: 30
+            damage:30
+            reloadMultiplier: 0.5
+            fragBullet: {
+                shieldDamageMultiplier: 4
+                fragBullets: 5
+            }
+            buildingDamageMultiplier: 0.5
+        }
+    }
+    requirements: [
+        copper/150,
+        graphite/135,
+        titanium/60,
+        plastanium/80,
+    ]
 }

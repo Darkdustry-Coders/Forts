@@ -39,7 +39,7 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
 
         val SCHEME_OPTIONS = Schematic.Options().skipAir().skipEmpty()
         val SCHEME_OPTIONS_LOAD = Schematic.Options().skipAir().skipEmpty().noNet()
-        val SCHEME_CREATE_OPTIONS = Schematic.Options().skipBuildings()
+        val SCHEME_CREATE_OPTIONS = Schematic.Options().buildingsReplaceAir()
 
         private val SCHEMATIC_HEAD = "$PREFIX.schematic."
         fun keyIsSchematic(key: String): Boolean = keyHasHeadByte(key, SCHEMATIC_HEAD)
@@ -207,7 +207,7 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
                 val i = (plotX + d) + plotY * (plotsX + 1)
 
                 if (!horizontalWalls.containsKey(i)) {
-                    horizontalWalls.put(i, Schematic.of(Vars.world.tiles, x, y, wallsSize, height))
+                    horizontalWalls.put(i, Schematic.of(Vars.world.tiles, x, y, wallsSize, height, SCHEME_CREATE_OPTIONS))
                     schematic.paste(jX * d, wallsSize, wallsSize, height, Vars.world.tiles, x, y)
                 }
             }
@@ -217,7 +217,7 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
                 val i = plotX + (plotY + d) * plotsX
 
                 if (!verticalWalls.containsKey(i)) {
-                    verticalWalls.put(i, Schematic.of(Vars.world.tiles, x, y, width, wallsSize))
+                    verticalWalls.put(i, Schematic.of(Vars.world.tiles, x, y, width, wallsSize, SCHEME_CREATE_OPTIONS))
                     schematic.paste(wallsSize, jY * d, width, wallsSize, Vars.world.tiles, x, y)
                 }
             }

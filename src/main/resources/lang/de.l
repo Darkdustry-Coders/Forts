@@ -5,6 +5,13 @@ notice.modifiers = [cyan]Aktive Modifikationen{if {modifiers.len} != 1 then s}:
                  = {forts.modifiers.{modifier}.desc})
                  = split (,) join (\n)}
 
+notice.help = [scarlet]Zerstöre die Feindliche Festung!
+            =
+            = [accent]Baue[][white] {icon}, um deine Basis zu erweitern.
+            = Wenn zu wenige Gebäude auf
+            = lder Platform über sind,
+            = [cyan]kollabiert[] sie.
+
 [forts.modifiers]
 airforce.name = Luftwaffe
 airforce.desc = Alle gebauten Geschütze werden von Einheiten getragen.
@@ -38,3 +45,9 @@ resourceflood.desc = Resourcen werden periodisch aufgefüllt.
 
 unstable.name = Instabil
 unstable.desc = Blöcke und Einheiten explodieren, wenn sie sterben.
+
+copper.name = Kupfer
+copper.desc = Alle Resourcen werden durch Kupfer ersetzt.
+
+march.name = Marsch
+march.desc = Von Spielern platzierte Blöcke können nicht abgebaut werden.

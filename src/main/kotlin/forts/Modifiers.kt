@@ -18,7 +18,6 @@ import mindustry.gen.Call
 import kotlin.reflect.KClass
 
 abstract class Modifier {
-    var priority = 100
     val lifetime = object : Lifetime() {
         override fun uponStart() {
             Round.alsoCancel(this)
@@ -63,6 +62,7 @@ private val modifierOrder: Array<KClass<out Modifier>> = arrayOf(
     forts.modifiers.Luxury::class,
     forts.modifiers.Airforce::class,
     forts.modifiers.Copper::class,
+    forts.modifiers.March::class,
 )
 val availableModifiers = Array(modifierOrder.size) {
     val klass = modifierOrder[it]
@@ -168,17 +168,18 @@ fun initModifiers() {
         //      }
         //  }
 
+        modifiers.removeAll { it.chance() < Mathf.random() }
+
         if (modifiers.contains { it is forts.modifiers.Decay } && modifiers.contains { it is forts.modifiers.Paper }) {
             if (Mathf.randomBoolean()) modifiers.remove { it is forts.modifiers.Decay }
             else modifiers.remove { it is forts.modifiers.Paper }
         }
 
-        modifiers.removeAll { it.chance() < Mathf.random() }
-        modifiers.sort { a, b -> b.priority - a.priority }
-
-        modifiers.each { it.start() }
         modifiers.each { Log.info("yoo ${it.getName()}") }
+    }
 
+    on<EventType.PlayEvent> {
+        modifiers.each { it.start() }
         refresh()
     }
 }

@@ -29,7 +29,7 @@ repositories {
 apply from: "$workspacePath/.cache/tools/buildscript/shared.repos.gradle"
 
 dependencies {
-    compileOnly files("$workspacePath/.bin/server-release.jar")
+    compileOnly files("$workspacePath/.cache/tools/buildscript/server-release.jar")
     compileOnly libs.kotlin.coro
 
     compileOnly 'mindurka:CorePlugin:latest-SNAPSHOT'
