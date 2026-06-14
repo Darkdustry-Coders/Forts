@@ -36,7 +36,7 @@ dependencies {
     compileOnly 'mindurka.coreplugin:annotations:latest-SNAPSHOT'
     compileOnly 'mindurka.coreplugin:buildExtras:latest-SNAPSHOT'
 
-    testImplementation libs.bundles.mindustry
+    testImplementation files("$workspacePath/.cache/tools/buildscript/server-release.jar")
     testImplementation 'org.jetbrains.kotlin:kotlin-test'
 }
 

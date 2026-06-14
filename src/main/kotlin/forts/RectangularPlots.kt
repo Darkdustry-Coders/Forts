@@ -405,14 +405,20 @@ class RectangularPlots(rc: RulesContext, shape: Shape): Plots {
 
         val plotX = (x - startX) / jX
         val plotY = (y - startY) / jY
-        val inPlotX = x - (plotX * jX + startX)
-        val inPlotY = y - (plotY * jY + startY)
+        // val inPlotX = x - (plotX * jX + startX)
+        // val inPlotY = y - (plotY * jY + startY)
 
         Core.app.post {
-            _handleBlockBreak(plotX, plotY)
-            if (inPlotX >= width) _handleBlockBreak(plotX + 1, plotY)
-            if (inPlotY >= height) _handleBlockBreak(plotX, plotY + 1)
-            if (inPlotX >= width && inPlotY >= height) _handleBlockBreak(plotX + 1, plotY + 1)
+            for (dx in -1..1) for (dy in -1..1) {
+                val px = plotX + dx
+                val py = plotY + dy
+                if (px !in 0..<plotsX) continue
+                if (py !in 0..<plotsY) continue
+                _handleBlockBreak(px, py)
+            }
+            // if (inPlotX >= width) _handleBlockBreak(plotX + 1, plotY)
+            // if (inPlotY >= height) _handleBlockBreak(plotX, plotY + 1)
+            // if (inPlotX >= width && inPlotY >= height) _handleBlockBreak(plotX + 1, plotY + 1)
         }
     }
     override fun handleBlockBreak(x: Int, y: Int, checkTeams: IntSeq) {
